@@ -1,0 +1,29 @@
+[project]
+name = "phone-deck"
+version = "0.1.0"
+description = "Self-hosted control deck and remote desktop for a Linux/Hyprland workstation, served as a PWA"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "PyJWT>=2.8",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "psutil>=5.9",
+    "evdev>=1.9.3",
+    "aiortc>=1.14.0",
+]
+
+# deckd (the root helper) deliberately has NO dependencies — stdlib only.
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "deckd"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+]

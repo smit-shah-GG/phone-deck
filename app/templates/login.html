@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>deck · login</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/theme.css">
+</head>
+<body class="bg-black text-zinc-100 h-screen flex items-center justify-center gap-12 select-none">
+  <!-- numpad (left) -->
+  <div class="grid grid-cols-3 gap-3 w-72">
+    {% for k in ['1','2','3','4','5','6','7','8','9'] %}
+    <button type="button" data-key="{{ k }}"
+      class="key bg-zinc-800 rounded-2xl py-5 text-2xl font-medium active:bg-zinc-700">{{ k }}</button>
+    {% endfor %}
+    <button type="button" data-key="C"    class="key bg-zinc-800 rounded-2xl py-5 text-lg text-zinc-400 active:bg-zinc-700">C</button>
+    <button type="button" data-key="0"    class="key bg-zinc-800 rounded-2xl py-5 text-2xl font-medium active:bg-zinc-700">0</button>
+    <button type="button" data-key="back" class="key bg-zinc-800 rounded-2xl py-5 text-2xl text-zinc-400 active:bg-zinc-700">⌫</button>
+  </div>
+
+  <!-- entry (right) -->
+  <form method="post" action="/login" class="w-64 text-center space-y-6">
+    <h1 class="text-lg tracking-widest text-zinc-400 uppercase">phone-deck</h1>
+    <div id="dots" class="h-9 flex items-center justify-center text-3xl tracking-[0.4em] text-zinc-300"></div>
+    <input type="hidden" name="pin" id="pin">
+    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-xl py-3 font-medium">Unlock</button>
+    {% if request.query_params.get('locked') %}
+      <p class="text-red-400 text-sm">Locked — try again in {{ request.query_params.get('locked') }}s</p>
+    {% elif request.query_params.get('bad') %}
+      <p class="text-red-400 text-sm">Wrong PIN</p>
+    {% endif %}
+  </form>
+
+  <script>
+    const pin = document.getElementById("pin");
+    const dots = document.getElementById("dots");
+    const MAX = 12;
+    const render = () => { dots.textContent = pin.value ? "●".repeat(pin.value.length) : "·····"; };
+    function press(k) {
+      if (k === "C") pin.value = "";
+      else if (k === "back") pin.value = pin.value.slice(0, -1);
+      else if (pin.value.length < MAX) pin.value += k;
+      render();
+    }
+    document.querySelectorAll("[data-key]").forEach((b) => (b.onclick = () => press(b.dataset.key)));
+    addEventListener("keydown", (e) => {
+      if (e.key >= "0" && e.key <= "9") press(e.key);
+      else if (e.key === "Backspace") press("back");
+      else if (e.key === "Enter") document.forms[0].submit();
+    });
+    render();
+  </script>
+</body>
+</html>

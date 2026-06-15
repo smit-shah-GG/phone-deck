@@ -1,0 +1,30 @@
+# Privileged helper. Runs as root, exposes only the actions in deckd/actions.py
+# over a Unix socket chowned to the deck group. Install to /etc/systemd/system/.
+#
+#   sudo cp systemd/deckd.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now deckd
+#
+# EDIT BEFORE USE:
+#   - DECK_SOCKET_GROUP : a group your normal user belongs to (usually your username)
+#   - ExecStart path    : the absolute path to this repo
+# deckd is stdlib-only, so it runs on the system python3 (no venv).
+[Unit]
+Description=phone-deck privileged helper (deckd)
+After=network.target
+
+[Service]
+Type=simple
+Environment=DECK_SOCKET=/run/phone-deck/deckd.sock
+Environment=DECK_SOCKET_GROUP=YOUR_GROUP
+# 0755 so the unprivileged web app can traverse to the socket; the socket itself
+# is 0660 root:<group>, so only the deck group can actually connect.
+RuntimeDirectory=phone-deck
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/python3 /path/to/phone-deck/deckd/daemon.py
+Restart=on-failure
+# The security boundary is the fixed action allowlist in deckd/actions.py — not an
+# FS sandbox. deckd must run privileged commands (cpupower, sysfs writes, systemctl),
+# so we deliberately don't apply ProtectSystem/ProtectHome here.
+
+[Install]
+WantedBy=multi-user.target

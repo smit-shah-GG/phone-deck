@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>deck</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/theme.css">
+  <style>
+    .sel {
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a1a1aa' stroke-width='1.5'><path d='M4 6l4 4 4-4'/></svg>");
+      background-repeat: no-repeat; background-position: right .55rem center; background-size: .7rem;
+      padding-right: 1.6rem;
+    }
+    .sel option { background: #18181b; color: #e4e2e3; }
+  </style>
+</head>
+<body class="bg-black text-zinc-100 h-screen overflow-hidden select-none">
+  <!-- persistent status strip -->
+  <header class="flex items-center gap-4 px-4 h-12 bg-zinc-950 border-b border-zinc-800 text-sm">
+    <span class="font-bold tracking-widest text-emerald-500">LIGHTNING</span>
+    <span id="st-gpu" class="text-zinc-400">GPU —</span>
+    <span id="st-cpu" class="text-zinc-400">CPU —</span>
+    <span id="st-aud" class="text-zinc-400">♪ —</span>
+    <span id="st-ws"  class="text-zinc-400 ml-auto">—</span>
+    <span id="st-conn" class="w-2 h-2 rounded-full bg-zinc-600" title="link"></span>
+    <span id="st-clock" class="text-zinc-300 tabular-nums">--:--</span>
+    <button id="fs-btn" class="text-zinc-500 px-1 text-base" title="fullscreen">⛶</button>
+  </header>
+
+  <!-- tabs -->
+  <nav class="flex gap-1 px-2 py-1 bg-zinc-950/60 text-xs uppercase tracking-wider">
+    <button data-tab="workspaces"  class="tab px-3 py-1 rounded bg-zinc-800">Workspaces</button>
+    <button data-tab="remote"      class="tab px-3 py-1 rounded text-zinc-500">Remote</button>
+    <button data-tab="modes"       class="tab px-3 py-1 rounded text-zinc-500">Modes</button>
+    <button data-tab="performance" class="tab px-3 py-1 rounded text-zinc-500">Performance</button>
+    <button data-tab="commands"    class="tab px-3 py-1 rounded text-zinc-500">Commands</button>
+    <button data-tab="audio"       class="tab px-3 py-1 rounded text-zinc-500">Audio</button>
+    <button data-tab="stream"      class="tab px-3 py-1 rounded text-zinc-500">Stream</button>
+    <button data-tab="system"      class="tab px-3 py-1 rounded text-zinc-500">System</button>
+    <button data-tab="files"       class="tab px-3 py-1 rounded text-zinc-500">Files</button>
+    <button data-tab="config"      class="tab px-3 py-1 rounded text-zinc-500">Config</button>
+  </nav>
+
+  <main class="p-3 h-[calc(100%-5.5rem)] overflow-auto">
+    <!-- Workspaces -->
+    <section data-page="workspaces" class="grid grid-cols-3 gap-3 items-start"></section>
+
+    <!-- Remote input (mouse left · keyboard right) -->
+    <section data-page="remote" class="hidden grid grid-cols-2 gap-3 h-[calc(100vh-9rem)]">
+      <!-- mouse -->
+      <div class="flex flex-col gap-2">
+        <div id="trackpad" class="flex-1 bg-zinc-900 rounded-xl flex items-center justify-center text-center text-zinc-600 text-xs px-4 touch-none">
+          Trackpad — drag to move · tap = click · two-finger tap = right · two-finger drag = scroll
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <button class="rbtn bg-zinc-800 rounded-lg py-3" data-click="left">Left</button>
+          <button class="rbtn bg-zinc-800 rounded-lg py-3" data-click="middle">Middle</button>
+          <button class="rbtn bg-zinc-800 rounded-lg py-3" data-click="right">Right</button>
+        </div>
+      </div>
+      <!-- keyboard -->
+      <div class="flex flex-col gap-2">
+        <div class="flex gap-2 items-center">
+          <input id="kbd" placeholder="type here…" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+            class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-600">
+          <button class="rkey bg-zinc-800 rounded-lg px-3 py-2" data-key="backspace">⌫</button>
+          <button class="rkey bg-zinc-800 rounded-lg px-3 py-2" data-key="enter">⏎</button>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-sm">
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="esc">Esc</button>
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="tab">Tab</button>
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="up">↑</button>
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="down">↓</button>
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="home">Home</button>
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="end">End</button>
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="left">←</button>
+          <button class="rkey bg-zinc-800 rounded-lg py-2" data-key="right">→</button>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-sm">
+          <button class="rcombo bg-zinc-800 rounded-lg py-2" data-combo="super">Super</button>
+          <button class="rcombo bg-zinc-800 rounded-lg py-2" data-combo="alt,tab">Alt⇥</button>
+          <button class="rcombo bg-zinc-800 rounded-lg py-2" data-combo="ctrl,w">^W</button>
+          <button class="rcombo bg-zinc-800 rounded-lg py-2" data-combo="ctrl,c">^C</button>
+          <button class="rcombo bg-zinc-800 rounded-lg py-2" data-combo="ctrl,v">^V</button>
+          <button class="rcombo bg-zinc-800 rounded-lg py-2" data-combo="ctrl,shift,c">^⇧C</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Modes / scenes -->
+    <section data-page="modes" class="hidden space-y-3">
+      <div id="mode-grid" class="grid grid-cols-3 gap-3"></div>
+      <pre id="mode-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-400 whitespace-pre-wrap overflow-auto max-h-64"></pre>
+    </section>
+
+    <!-- Performance -->
+    <section data-page="performance" class="hidden space-y-4 max-w-xl">
+      <div class="flex gap-2">
+        <button class="act flex-1 bg-zinc-800 rounded-lg py-4" data-action="governor_performance">Governor: Performance</button>
+        <button class="act flex-1 bg-zinc-800 rounded-lg py-4" data-action="governor_powersave">Governor: Powersave</button>
+      </div>
+      <div class="flex gap-2">
+        <button class="act flex-1 bg-zinc-800 rounded-lg py-3" data-action="turbo_on">Turbo On</button>
+        <button class="act flex-1 bg-zinc-800 rounded-lg py-3" data-action="turbo_off">Turbo Off</button>
+      </div>
+      <div class="bg-zinc-900 rounded-lg p-4">
+        <label class="text-sm text-zinc-400">GPU power limit: <span id="pl-val">170</span> W</label>
+        <input id="pl-slider" type="range" min="100" max="170" value="170" class="w-full mt-2">
+        <button class="act mt-3 bg-emerald-700 rounded-lg px-4 py-2" data-action="gpu_power_limit" data-param="watts:pl-slider">Apply</button>
+      </div>
+      <p id="act-result" class="text-xs text-zinc-500"></p>
+    </section>
+
+    <!-- Commands / Deploy -->
+    <section data-page="commands" class="hidden space-y-3">
+      <div id="cmd-grid" class="grid grid-cols-3 gap-2"></div>
+      <pre id="cmd-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-400 whitespace-pre-wrap overflow-auto max-h-64"></pre>
+    </section>
+
+    <!-- Audio / Media -->
+    <section data-page="audio" class="hidden grid grid-cols-2 gap-4">
+      <div class="space-y-4">
+        <div class="flex gap-2">
+          <button id="mic-btn" class="flex-1 bg-zinc-800 rounded-lg py-4" data-mute="mic">Mic</button>
+          <button id="spk-btn" class="flex-1 bg-zinc-800 rounded-lg py-4" data-mute="sink">Speaker</button>
+        </div>
+        <div class="bg-zinc-900 rounded-lg p-4">
+          <label class="text-sm text-zinc-400">Volume: <span id="vol-val">—</span>%</label>
+          <input id="vol-slider" type="range" min="0" max="150" value="0" class="w-full mt-2">
+        </div>
+        <div class="bg-zinc-900 rounded-lg p-3">
+          <div class="flex gap-3 items-center mb-2">
+            <img id="art" alt="" class="w-14 h-14 rounded object-cover bg-zinc-800 shrink-0 hidden">
+            <p id="now-playing" class="text-sm text-zinc-300 truncate flex-1">—</p>
+          </div>
+          <div class="flex gap-2">
+            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-xl" data-media="previous">⏮</button>
+            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-xl" data-media="play-pause">⏯</button>
+            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-xl" data-media="next">⏭</button>
+          </div>
+        </div>
+      </div>
+      <div class="space-y-3 overflow-auto">
+        <div>
+          <p class="text-xs uppercase tracking-wider text-zinc-500 mb-1">Output device</p>
+          <div id="sink-list" class="space-y-1"></div>
+        </div>
+        <div>
+          <p class="text-xs uppercase tracking-wider text-zinc-500 mb-1">Input device</p>
+          <div id="source-list" class="space-y-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- System / Net -->
+    <section data-page="system" class="hidden grid grid-cols-2 gap-4">
+      <div class="space-y-3">
+        <div id="ts-status" class="bg-zinc-900 rounded-lg p-3 text-sm text-zinc-400">Tailscale —</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button class="sys bg-zinc-800 rounded-lg py-3" data-sys="lock">Lock</button>
+          <button class="act bg-zinc-800 rounded-lg py-3" data-action="nm_restart" data-confirm="Restart NetworkManager?">Restart NM</button>
+          <button class="act bg-amber-900/70 rounded-lg py-3" data-action="suspend" data-confirm="Suspend the host?">Suspend</button>
+          <button class="act bg-amber-900/70 rounded-lg py-3" data-action="reboot" data-confirm="Reboot the host?">Reboot</button>
+          <button class="act col-span-2 bg-red-900/70 rounded-lg py-3" data-action="poweroff" data-confirm="Power OFF the host?">Power Off</button>
+        </div>
+        <p id="sys-result" class="text-xs text-zinc-500"></p>
+      </div>
+      <div>
+        <p class="text-xs uppercase tracking-wider text-zinc-500 mb-1">Top processes (by memory)</p>
+        <div id="proc-list" class="space-y-1 text-sm"></div>
+      </div>
+    </section>
+
+    <!-- Audio streaming (bidirectional) -->
+    <section data-page="stream" class="hidden flex gap-3 items-start h-[calc(100vh-9rem)]">
+      <div class="bg-zinc-900 rounded-lg p-4 space-y-3 w-72 shrink-0">
+        <div class="flex items-center gap-2">
+          <span id="stream-dot" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
+          <span id="stream-status" class="text-sm text-zinc-400">Idle</span>
+        </div>
+        <button id="stream-listen" class="w-full bg-emerald-700 rounded-lg py-2 text-sm">Listen to PC: ON</button>
+        <button id="stream-mic" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">Phone mic → PC: OFF</button>
+        <button id="stream-phoneonly" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">Phone-only output: OFF</button>
+        <button id="stream-video" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">Video (screen): OFF</button>
+        <div class="flex gap-2">
+          <select id="stream-monitor" class="sel flex-1 min-w-0 truncate bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600"></select>
+          <select id="stream-quality" class="sel shrink-0 w-24 bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
+            <option value="low">540p</option>
+            <option value="medium" selected>720p</option>
+            <option value="high">1080p</option>
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <button id="stream-connect" class="flex-1 bg-emerald-600 rounded-lg py-3 font-medium">Connect</button>
+          <button id="stream-stop" class="flex-1 bg-zinc-800 rounded-lg py-3">Stop</button>
+        </div>
+        <p class="text-xs text-zinc-500">Mic shows up on the rig as input <b>“Monitor of PhoneDeckMic”</b> — select it in the app you want to use it in. Headphones recommended to avoid echo. Keep this screen foreground.</p>
+      </div>
+      <audio id="stream-audio" autoplay playsinline></audio>
+      <video id="stream-video-el" autoplay playsinline muted class="flex-1 min-w-0 max-h-full rounded-lg bg-black object-contain hidden touch-none cursor-crosshair"></video>
+    </section>
+
+    <!-- Files: screenshot + drop -->
+    <section data-page="files" class="hidden grid grid-cols-2 gap-4 items-start">
+      <div class="bg-zinc-900 rounded-lg p-4 space-y-3">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Screenshot</p>
+        <div class="flex gap-2">
+          <select id="shot-monitor" class="sel flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600"></select>
+          <button id="shot-grab" class="shrink-0 bg-emerald-600 rounded-lg px-4 py-2 text-sm font-medium">Grab</button>
+        </div>
+        <a id="shot-dl" download class="hidden text-emerald-400 text-sm underline">Download PNG</a>
+        <img id="shot-img" class="w-full rounded-lg hidden" alt="">
+      </div>
+      <div class="bg-zinc-900 rounded-lg p-4 space-y-3">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Send file to PC</p>
+        <input id="up-file" type="file" class="text-sm w-full file:mr-3 file:rounded file:border-0 file:bg-zinc-800 file:px-3 file:py-1 file:text-zinc-200">
+        <button id="up-send" class="bg-emerald-600 rounded-lg px-4 py-2 text-sm font-medium">Send to PC</button>
+        <p id="up-status" class="text-xs text-zinc-500"></p>
+        <p class="text-xs text-zinc-600">Lands in <b>~/phone-deck-drop</b> on the rig.</p>
+      </div>
+    </section>
+
+    <!-- Config editor -->
+    <section data-page="config" class="hidden space-y-2">
+      <div class="flex items-center gap-2">
+        <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="commands">commands.json</button>
+        <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="modes">modes.json</button>
+        <span id="cfg-status" class="text-xs flex-1"></span>
+        <button id="cfg-save" class="bg-emerald-600 rounded px-4 py-1 text-sm font-medium">Save</button>
+      </div>
+      <textarea id="cfg-text" spellcheck="false" autocapitalize="off" autocomplete="off"
+        class="w-full h-[calc(100vh-11rem)] bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-xs leading-relaxed focus:outline-none focus:border-emerald-600"></textarea>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

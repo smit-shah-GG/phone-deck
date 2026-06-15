@@ -1,0 +1,19 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# uv lockfile — keep it if you want reproducible installs; ignore if sharing as a reference
+# uv.lock
+
+# Local secrets/config (these live in ~/.config/phone-deck, not here — listed for safety)
+secret.json
+commands.json
+modes.json
+*.bak
+
+# Editor / OS
+.DS_Store
+*.swp

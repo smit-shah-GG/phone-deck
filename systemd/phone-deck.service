@@ -1,0 +1,27 @@
+# Unprivileged web app. Runs as your user inside the graphical session.
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp systemd/phone-deck.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now phone-deck
+#
+# EDIT BEFORE USE: replace /path/to/phone-deck with this repo's absolute path.
+#
+# NOTE: this unit relies on graphical-session.target, which only activates if your
+# compositor is launched via uwsm. If Hyprland runs in a plain logind session, the
+# unit won't auto-start on login — instead start it from your Hyprland autostart:
+#   exec-once = systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP && systemctl --user start phone-deck
+[Unit]
+Description=phone-deck web app
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/phone-deck
+# Secure cookies — set once served over HTTPS via `tailscale serve`.
+Environment=DECK_SECURE_COOKIES=1
+ExecStart=/path/to/phone-deck/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8765
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
