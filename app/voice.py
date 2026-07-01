@@ -19,6 +19,8 @@ import contextlib
 import difflib
 import os
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -69,14 +71,22 @@ def load_config() -> dict:
 
 
 # ---- STT -------------------------------------------------------------------
+# faster-whisper / ctranslate2 transcribe() is NOT safe to call concurrently on one model
+# (concurrent calls deadlock while holding the GIL, which freezes the whole event loop). So
+# all transcription runs on a single dedicated worker — never in the shared default pool —
+# which serializes it. The model load is lock-guarded too, so two first calls can't race.
+_STT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stt")
 _model = None
+_model_lock = threading.Lock()
 
 
 def _get_model():
     global _model
     if _model is None:
-        from faster_whisper import WhisperModel
-        _model = WhisperModel("small.en", device="cpu", compute_type="int8")
+        with _model_lock:
+            if _model is None:
+                from faster_whisper import WhisperModel
+                _model = WhisperModel("small.en", device="cpu", compute_type="int8", cpu_threads=4)
     return _model
 
 
@@ -169,7 +179,7 @@ async def stop() -> dict:
         return {"heard": "", "verb": None, "note": "(too short)"}
     audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
     loop = asyncio.get_running_loop()
-    text = await loop.run_in_executor(None, _transcribe, audio)
+    text = await loop.run_in_executor(_STT_EXECUTOR, _transcribe, audio)
     return await plan(text)
 
 
@@ -183,7 +193,7 @@ async def transcribe_upload(data: bytes) -> dict:
         with open(path, "wb") as f:
             f.write(data)
         loop = asyncio.get_running_loop()
-        text = await loop.run_in_executor(None, _transcribe_file, path)
+        text = await loop.run_in_executor(_STT_EXECUTOR, _transcribe_file, path)
     except OSError:
         return {"heard": "", "verb": None, "note": "(upload failed)", "plan": None}
     finally:
