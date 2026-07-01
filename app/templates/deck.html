@@ -48,6 +48,7 @@
     <button data-tab="workspaces"  class="tab px-3 py-1 rounded bg-zinc-800">Workspaces</button>
     <button data-tab="remote"      class="tab px-3 py-1 rounded text-zinc-500">Remote</button>
     <button data-tab="modes"       class="tab px-3 py-1 rounded text-zinc-500">Modes</button>
+    <button data-tab="voice"       class="tab px-3 py-1 rounded text-zinc-500">Voice</button>
     <button data-tab="commands"    class="tab px-3 py-1 rounded text-zinc-500">Commands</button>
     <button data-tab="audio"       class="tab px-3 py-1 rounded text-zinc-500">Audio</button>
     <button data-tab="stream"      class="tab px-3 py-1 rounded text-zinc-500">Stream</button>
@@ -106,6 +107,16 @@
     <section data-page="modes" class="hidden space-y-3">
       <div id="mode-grid" class="grid grid-cols-3 gap-3"></div>
       <pre id="mode-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-400 whitespace-pre-wrap overflow-auto max-h-64"></pre>
+    </section>
+
+    <!-- Voice router -->
+    <section data-page="voice" class="hidden flex flex-col gap-3 max-w-2xl mx-auto w-full">
+      <button id="voice-btn" class="w-full rounded-xl py-8 text-2xl font-semibold bg-emerald-700">🎙 Start</button>
+      <p class="text-xs text-zinc-500 text-center">
+        Lane word first — <b class="text-zinc-300">macro</b> work · <b class="text-zinc-300">type</b> hello world ·
+        <b class="text-zinc-300">input</b> copy · <span class="text-zinc-600">jarvis (Tier 2)</span>
+      </p>
+      <div id="voice-log" class="space-y-2 overflow-auto"></div>
     </section>
 
     <!-- Commands / Deploy -->
@@ -226,6 +237,7 @@
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="commands">commands.json</button>
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="modes">modes.json</button>
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="context">context.json</button>
+        <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="voice">voice.json</button>
         <span id="cfg-status" class="text-xs flex-1"></span>
         <button id="cfg-save" class="bg-emerald-600 rounded px-4 py-1 text-sm font-medium">Save</button>
       </div>

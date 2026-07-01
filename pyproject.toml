@@ -12,6 +12,7 @@ dependencies = [
     "psutil>=5.9",
     "evdev>=1.9.3",
     "aiortc>=1.14.0",
+    "faster-whisper>=1.2.1",
 ]
 
 # deckd (the root helper) deliberately has NO dependencies — stdlib only.

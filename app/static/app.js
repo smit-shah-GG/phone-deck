@@ -524,6 +524,50 @@ async function loadModes() {
   });
 }
 
+// ---- voice router (Tier 1): start/stop toggle + trace log ----
+(function initVoice() {
+  const btn = document.getElementById("voice-btn");
+  const log = document.getElementById("voice-log");
+  if (!btn || !log) return;
+  let state = "idle";  // idle | recording | processing
+  const base = "w-full rounded-xl py-8 text-2xl font-semibold ";
+  function set(s) {
+    state = s;
+    btn.disabled = s === "processing";
+    btn.className = base + (s === "idle" ? "bg-emerald-700"
+      : s === "recording" ? "bg-red-700 animate-pulse" : "bg-zinc-700 opacity-70");
+    btn.textContent = s === "idle" ? "🎙 Start" : s === "recording" ? "⏹ Stop" : "… processing";
+  }
+  function render(t) {
+    if (!t) return;
+    const esc = (x) => String(x).replace(/</g, "&lt;");
+    const heard = t.heard ? `"${esc(t.heard)}"` : "(nothing heard)";
+    const verb = t.verb
+      ? `<span class="text-emerald-400 font-medium">${esc(t.verb)}</span>`
+      : `<span class="text-zinc-500">no verb</span>`;
+    const matched = t.matched ? ` <span class="text-zinc-400">→ ${esc(t.matched)}</span>` : "";
+    const detail = esc(t.result || t.note || "");
+    const div = document.createElement("div");
+    div.className = "bg-zinc-900 rounded-lg px-3 py-2";
+    div.innerHTML = `<div class="text-sm text-zinc-200 truncate">${heard}</div>
+      <div class="text-xs mt-0.5">${verb}${matched} · <span class="text-zinc-400">${detail}</span></div>`;
+    log.prepend(div);
+    while (log.children.length > 20) log.removeChild(log.lastChild);
+  }
+  btn.onclick = async () => {
+    if (state === "idle") {
+      const r = await post("/voice/start");
+      if (r && r.ok) set("recording");
+      else render({ heard: "", verb: null, note: (r && r.error) || "mic unavailable" });
+    } else if (state === "recording") {
+      set("processing");
+      render(await post("/voice/stop"));
+      set("idle");
+    }
+  };
+  set("idle");
+})();
+
 // ---- live state rendering ----
 function renderStatus(s) {
   const g = s.telemetry?.gpu, c = s.telemetry?.cpu, a = s.audio;

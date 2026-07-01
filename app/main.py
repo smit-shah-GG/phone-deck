@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, grab, hid, hypr, modes, sysinfo, telemetry, theme
+from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, grab, hid, hypr, modes, sysinfo, telemetry, theme, voice
 
 BASE = Path(__file__).parent
 app = FastAPI(title="phone-deck")
@@ -258,6 +258,17 @@ async def context_config(_=Depends(auth.require_auth)):
 async def context_key(payload: dict, _=Depends(auth.require_auth)):
     return JSONResponse({"ok": await hypr.send_shortcut(
         payload.get("cls", ""), payload.get("key", ""), payload.get("mods", ""))})
+
+
+# ---- voice router (Tier 1) -------------------------------------------------
+@app.post("/voice/start")
+async def voice_start(_=Depends(auth.require_auth)):
+    return JSONResponse(await voice.start())
+
+
+@app.post("/voice/stop")
+async def voice_stop(_=Depends(auth.require_auth)):
+    return JSONResponse(await voice.stop())
 
 
 # ---- in-deck config editing ------------------------------------------------
