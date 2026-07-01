@@ -49,7 +49,6 @@
     <button data-tab="remote"      class="tab px-3 py-1 rounded text-zinc-500">Remote</button>
     <button data-tab="modes"       class="tab px-3 py-1 rounded text-zinc-500">Modes</button>
     <button data-tab="voice"       class="tab px-3 py-1 rounded text-zinc-500">Voice</button>
-    <button data-tab="commands"    class="tab px-3 py-1 rounded text-zinc-500">Commands</button>
     <button data-tab="audio"       class="tab px-3 py-1 rounded text-zinc-500">Audio</button>
     <button data-tab="stream"      class="tab px-3 py-1 rounded text-zinc-500">Stream</button>
     <button data-tab="system"      class="tab px-3 py-1 rounded text-zinc-500">System</button>
@@ -121,15 +120,9 @@
       <button id="voice-btn" class="w-full rounded-xl py-8 text-2xl font-semibold bg-emerald-700">🎙 Start</button>
       <p class="text-xs text-zinc-500 text-center">
         Lane word first — <b class="text-zinc-300">macro</b> work · <b class="text-zinc-300">type</b> hello world ·
-        <b class="text-zinc-300">input</b> copy · <span class="text-zinc-600">jarvis (Tier 2)</span>. Tap a result to run it.
+        <b class="text-zinc-300">input</b> copy · <b class="text-zinc-300">friday</b> what's my gpu temp. Tap a result to run it.
       </p>
       <div id="voice-log" class="space-y-2 overflow-auto"></div>
-    </section>
-
-    <!-- Commands / Deploy -->
-    <section data-page="commands" class="hidden space-y-3">
-      <div id="cmd-grid" class="grid grid-cols-3 gap-2"></div>
-      <pre id="cmd-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-400 whitespace-pre-wrap overflow-auto max-h-64"></pre>
     </section>
 
     <!-- Audio / Media -->

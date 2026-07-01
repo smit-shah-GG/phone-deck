@@ -6,11 +6,11 @@ from app import voice
 
 
 def test_verb_exact_alias_case_and_punctuation():
-    aliases = {"jarvis": ["travis", "jervis"]}
+    aliases = {"friday": ["travis", "jervis", "jarvis"]}
     assert voice.match_verb("macro", {}) == "macro"
     assert voice.match_verb("Type", {}) == "type"           # case-insensitive
     assert voice.match_verb("input,", {}) == "input"          # trailing punctuation stripped
-    assert voice.match_verb("travis", aliases) == "jarvis"    # alias
+    assert voice.match_verb("travis", aliases) == "friday"    # alias -> friday
     assert voice.match_verb("hello", {}) is None              # not a verb -> no route
 
 
@@ -47,11 +47,19 @@ def test_plan_produces_executable_descriptor_without_dispatch():
     assert p["plan"] is None
 
 
-def test_plan_jarvis_grammar():
-    # jarvis rides the confirm flow: plan() parses the grammar but never calls the LLM.
-    p = asyncio.run(voice.plan("jarvis what is the capital of france"))
+def test_plan_friday_grammar():
+    # "friday" is the answerer trigger (in VERBS, so it matches regardless of config).
+    # It rides the confirm flow: plan() parses the grammar but never calls the LLM.
+    p = asyncio.run(voice.plan("friday what is the capital of france"))
+    assert p["verb"] == "friday"
     assert p["plan"] == {"lane": "jarvis", "query": "what is the capital of france", "web": False}
-    p = asyncio.run(voice.plan("jarvis search latest python release"))
+    p = asyncio.run(voice.plan("friday search latest python release"))
     assert p["plan"]["web"] is True and p["plan"]["query"] == "latest python release"
-    p = asyncio.run(voice.plan("jarvis reset"))
+    p = asyncio.run(voice.plan("friday reset"))
     assert p["plan"] == {"lane": "jarvis", "reset": True}
+
+
+def test_jarvis_stays_an_alias_for_friday():
+    # old habit / STT mis-hears still route to the answerer
+    assert voice.match_verb("jarvis", {"friday": ["jarvis"]}) == "friday"
+    assert voice.match_verb("javis", {"friday": ["javis"]}) == "friday"

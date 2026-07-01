@@ -86,7 +86,6 @@ document.querySelectorAll(".tab").forEach((btn) => {
     });
     document.querySelectorAll("[data-page]").forEach((p) =>
       p.classList.toggle("hidden", p.dataset.page !== btn.dataset.tab));
-    if (btn.dataset.tab === "commands") loadCommands();
     if (btn.dataset.tab === "modes") loadModes();
     if (btn.dataset.tab === "workspaces") fetchBrightness();
     if (btn.dataset.tab === "config") loadConfig(cfgCurrent);
@@ -191,29 +190,8 @@ document.querySelectorAll("[data-sys]").forEach((b) => {
   if (b.dataset.sys === "lock") b.onclick = () => post("/sys/lock");
 });
 
-// ---- commands / deploy ----
-async function loadCommands() {
-  const grid = document.getElementById("cmd-grid");
-  const cmds = await (await fetch("/commands")).json().catch(() => []);
-  if (!cmds.length) {
-    grid.innerHTML = '<p class="col-span-3 text-zinc-600 text-sm">No commands. Add them to ~/.config/phone-deck/commands.json</p>';
-    return;
-  }
-  grid.innerHTML = cmds.map((c) =>
-    `<button class="cmd bg-zinc-800 rounded-lg py-4 text-sm" data-id="${c.id}"
-      ${c.confirm ? 'data-confirm="1"' : ""}>${c.label}</button>`).join("");
-  grid.querySelectorAll(".cmd").forEach((b) => {
-    b.onclick = async () => {
-      if (b.dataset.confirm && !confirm(`Run "${b.textContent}"?`)) return;
-      const out = document.getElementById("cmd-output");
-      out.textContent = "running…";
-      b.classList.add("opacity-50");
-      const res = await post("/commands/run", { id: b.dataset.id });
-      b.classList.remove("opacity-50");
-      out.textContent = (res.ok ? "✓ " : `✗ (${res.code ?? res.error}) `) + "\n" + (res.output || res.error || "");
-    };
-  });
-}
+// Commands tab retired — the voice `macro` lane covers commands ("macro reload hyprland").
+// The /commands endpoints, commands.json, and Config-tab editing stay.
 
 // ---- remote input (keyboard + trackpad over a dedicated WS) ----
 let inputSock = null;

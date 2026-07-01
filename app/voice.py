@@ -6,7 +6,7 @@ faster-whisper `small.en` (CPU) transcribes -> the first spoken word picks a lan
   macro <label>   run a mode or command (difflib match; confirm-flagged commands skipped)
   type  <prose>   type it verbatim (ASCII-folded) via uinput
   input <phrase>  a named intent -> key/chord from the voice.json vocab
-  jarvis <query>  read-only answerer — NOT in Tier 1 (arrives in Tier 2)
+  friday <query>  read-only answerer (jarvis.py: ollama + SearXNG); "friday search …" grounds
 
 No verb match -> no-op + a trace, so mis-hears are visible and never fire an action.
 STT is CPU-only on purpose: the deterministic lanes keep working while the GPU is busy.
@@ -27,13 +27,15 @@ import numpy as np
 from . import commands, config, hid, jarvis, modes
 
 VOICE_FILE = config.CONFIG_DIR / "voice.json"
-VERBS = ("macro", "type", "input", "jarvis")
+VERBS = ("macro", "type", "input", "friday")   # "friday" = the answerer trigger (STT-robust)
 _MATCH_CUTOFF = 0.6
 _AUTO_STOP_S = 30            # safety: kill a forgotten capture
 
 DEFAULT: dict = {
-    # per-verb aliases, grown from observed mis-hears (STT sometimes hears "travis" etc.)
-    "aliases": {"macro": [], "type": [], "input": [], "jarvis": ["travis", "jervis", "service"]},
+    # per-verb aliases, grown from observed mis-hears. "friday" is the answerer trigger — a
+    # common word (STT-robust); jarvis/javis kept so the old habit still routes.
+    "aliases": {"macro": [], "type": [], "input": [],
+                "friday": ["jarvis", "javis", "travis", "jervis", "fridays", "friday's"]},
     # named intent -> hid key/chord tokens (fed straight to hid's combo handler).
     "input": {
         "copy": ["ctrl", "c"], "terminal copy": ["ctrl", "shift", "c"],
@@ -276,18 +278,19 @@ async def plan(text: str) -> dict:
                 "plan": {"lane": "macro", "kind": hit["kind"], "id": hit["id"],
                          "label": hit["label"], "confirm": hit["confirm"]}}
 
-    # verb == "jarvis" — read-only answerer. Rides the confirm flow too: you verify the
-    # transcribed question before a GPU call fires. "search …" = web grounding; "reset" = clear memory.
+    # verb == "friday" — the read-only answerer (internal lane id stays "jarvis"). Rides the
+    # confirm flow: verify the transcribed question before a GPU call fires. "search …" = web
+    # grounding; "reset" = clear memory.
     low = rest.lower()
     if low in ("reset", "reset memory", "clear", "clear memory"):
-        return {"heard": text, "verb": "jarvis", "preview": "jarvis: reset memory",
+        return {"heard": text, "verb": "friday", "preview": "friday: reset memory",
                 "plan": {"lane": "jarvis", "reset": True}}
     web = low.startswith("search ")
     q = rest[7:].strip() if web else rest
     if not q:
-        return {"heard": text, "verb": "jarvis", "note": "(no query)", "plan": None}
-    return {"heard": text, "verb": "jarvis",
-            "preview": ("jarvis search: " if web else "jarvis: ") + q,
+        return {"heard": text, "verb": "friday", "note": "(no query)", "plan": None}
+    return {"heard": text, "verb": "friday",
+            "preview": ("friday search: " if web else "friday: ") + q,
             "plan": {"lane": "jarvis", "query": q, "web": web}}
 
 
