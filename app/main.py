@@ -288,7 +288,7 @@ async def voice_transcribe(file: UploadFile = File(...), _=Depends(auth.require_
 
 @app.post("/voice/execute")                  # dispatch a confirmed plan
 async def voice_execute(payload: dict, _=Depends(auth.require_auth)):
-    return JSONResponse(await voice.execute(payload.get("plan")))
+    return JSONResponse(await voice.execute(payload.get("plan"), _state))
 
 
 # ---- in-deck config editing ------------------------------------------------

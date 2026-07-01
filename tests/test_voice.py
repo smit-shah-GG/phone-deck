@@ -45,3 +45,13 @@ def test_plan_produces_executable_descriptor_without_dispatch():
     assert p["plan"]["lane"] == "input" and p["plan"]["keys"] == ["ctrl", "c"]
     p = asyncio.run(voice.plan("gibberish nothing here"))
     assert p["plan"] is None
+
+
+def test_plan_jarvis_grammar():
+    # jarvis rides the confirm flow: plan() parses the grammar but never calls the LLM.
+    p = asyncio.run(voice.plan("jarvis what is the capital of france"))
+    assert p["plan"] == {"lane": "jarvis", "query": "what is the capital of france", "web": False}
+    p = asyncio.run(voice.plan("jarvis search latest python release"))
+    assert p["plan"]["web"] is True and p["plan"]["query"] == "latest python release"
+    p = asyncio.run(voice.plan("jarvis reset"))
+    assert p["plan"] == {"lane": "jarvis", "reset": True}

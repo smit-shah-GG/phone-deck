@@ -558,6 +558,18 @@ async function loadModes() {
       <div class="text-xs mt-0.5">${verb} · ${detail}${tail}</div>`;
   }
 
+  // jarvis answers get their own layout: full multi-line text + cited source links
+  function renderJarvis(card, t, r) {
+    const ans = esc((r && r.result) || "no answer");
+    let src = "";
+    if (r && r.sources && r.sources.length) {
+      src = '<div class="mt-2 space-y-0.5 border-t border-zinc-800 pt-1">' + r.sources.map((s, i) =>
+        `<a href="${esc(s.url)}" target="_blank" rel="noopener" class="block text-xs text-emerald-400 truncate">[${i + 1}] ${esc(s.title)}</a>`).join("") + "</div>";
+    }
+    card.innerHTML = `<div class="text-xs text-zinc-500 truncate">"${esc(t.heard)}"</div>
+      <div class="text-sm ${(r && r.ok) ? "text-zinc-100" : "text-amber-400"} mt-1 whitespace-pre-wrap">${ans}</div>${src}`;
+  }
+
   function render(t) {
     if (!t) { set("idle"); return; }
     const pending = !!t.plan;
@@ -570,9 +582,15 @@ async function loadModes() {
         if (t.plan.confirm && !confirm(`Run "${t.plan.label}"?`)) return;   // extra gate for confirm-flagged
         card.dataset.done = "1";
         card.classList.remove("ring-1", "ring-emerald-600/50", "cursor-pointer");
+        const jv = t.plan.lane === "jarvis";
+        if (jv) card.innerHTML = `<div class="text-xs text-zinc-500 truncate">"${esc(t.heard)}"</div>
+          <div class="text-sm text-zinc-400 mt-1">…thinking</div>`;
         const r = await post("/voice/execute", { plan: t.plan });
-        t._result = (r && r.result) || (r && r.ok ? "ok" : "failed");
-        card.innerHTML = cardHTML(t, r && r.ok ? "done" : "fail");
+        if (jv) renderJarvis(card, t, r);
+        else {
+          t._result = (r && r.result) || (r && r.ok ? "ok" : "failed");
+          card.innerHTML = cardHTML(t, r && r.ok ? "done" : "fail");
+        }
       };
     }
     log.prepend(card);

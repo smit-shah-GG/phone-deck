@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
-from . import commands, config, hid, modes
+from . import commands, config, hid, jarvis, modes
 
 VOICE_FILE = config.CONFIG_DIR / "voice.json"
 VERBS = ("macro", "type", "input", "jarvis")
@@ -276,16 +276,32 @@ async def plan(text: str) -> dict:
                 "plan": {"lane": "macro", "kind": hit["kind"], "id": hit["id"],
                          "label": hit["label"], "confirm": hit["confirm"]}}
 
-    # verb == "jarvis"
-    return {"heard": text, "verb": "jarvis", "note": "jarvis arrives in Tier 2", "plan": None}
+    # verb == "jarvis" — read-only answerer. Rides the confirm flow too: you verify the
+    # transcribed question before a GPU call fires. "search …" = web grounding; "reset" = clear memory.
+    low = rest.lower()
+    if low in ("reset", "reset memory", "clear", "clear memory"):
+        return {"heard": text, "verb": "jarvis", "preview": "jarvis: reset memory",
+                "plan": {"lane": "jarvis", "reset": True}}
+    web = low.startswith("search ")
+    q = rest[7:].strip() if web else rest
+    if not q:
+        return {"heard": text, "verb": "jarvis", "note": "(no query)", "plan": None}
+    return {"heard": text, "verb": "jarvis",
+            "preview": ("jarvis search: " if web else "jarvis: ") + q,
+            "plan": {"lane": "jarvis", "query": q, "web": web}}
 
 
-async def execute(p: dict | None) -> dict:
+async def execute(p: dict | None, state: dict | None = None) -> dict:
     """Dispatch a plan from plan(). Re-validates through the safe primitives — never
-    trusts the client blindly (macro ids are re-checked; keys/text go through hid)."""
+    trusts the client blindly (macro ids are re-checked; keys/text go through hid).
+    `state` is the live `_state`, injected into jarvis prompts."""
     if not isinstance(p, dict):
         return {"ok": False, "result": "no plan"}
     lane = p.get("lane")
+    if lane == "jarvis":
+        if p.get("reset"):
+            return jarvis.reset()
+        return await jarvis.answer(p.get("query", ""), state or {}, bool(p.get("web")))
     if lane == "type":
         text = str(p.get("text", ""))
         if text:
