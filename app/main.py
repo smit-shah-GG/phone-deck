@@ -8,6 +8,16 @@ Serves plain HTTP on 127.0.0.1; put `tailscale serve` in front for HTTPS/WSS.
 
 from __future__ import annotations
 
+# Force the numeric libs (OpenBLAS/OMP/MKL) single-threaded BEFORE numpy is imported.
+# faster-whisper's feature extractor spins up OpenBLAS/OMP worker threads, and those pools
+# are NOT fork-safe. The deck spawns subprocesses constantly (audio/telemetry polling); a
+# spawn (fork) landing during an active STT computation collided with OpenBLAS's threads and
+# deadlocked the whole event loop. Single-threaded numeric libs remove that pool so fork is
+# safe again. ctranslate2 keeps its own threads (cpu_threads), so inference stays fast.
+import os
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")
+
 import asyncio
 import contextlib
 import mimetypes
