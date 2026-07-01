@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, deckclient, grab, hid, hypr, modes, sysinfo, telemetry, theme
+from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, grab, hid, hypr, modes, sysinfo, telemetry, theme
 
 BASE = Path(__file__).parent
 app = FastAPI(title="phone-deck")
@@ -31,6 +31,7 @@ templates = Jinja2Templates(directory=BASE / "templates")
 # ---- live state broadcast --------------------------------------------------
 _clients: set[WebSocket] = set()
 _state: dict = {"hypr": {}, "telemetry": {}, "audio": {}, "sysinfo": {}}
+_mon_sig: tuple = ()   # last-seen monitor name set; remap when it changes
 
 
 async def _broadcast():
@@ -44,7 +45,14 @@ async def _broadcast():
 
 
 async def _on_hypr_change():
+    global _mon_sig
     _state["hypr"] = await hypr.snapshot()
+    # Re-apply the dynamic monitor→workspace mapping whenever the set of monitors
+    # changes (hotplug). Cheap signature check keeps it off the hot path of ws/focus events.
+    sig = tuple(m["name"] for m in _state["hypr"].get("monitors", []))
+    if sig and sig != _mon_sig:
+        _mon_sig = sig
+        await hypr.apply_monitor_mapping(_state["hypr"]["monitors"])
     await _broadcast()
 
 
@@ -65,8 +73,13 @@ async def _slow_loop():  # tailscale + processes
 
 @app.on_event("startup")
 async def _startup():
+    global _mon_sig
     await audio_rtc.cleanup_stale()   # drop a virtual sink left by a hard crash
     _state["hypr"] = await hypr.snapshot()
+    # Apply the monitor→workspace mapping the deck now owns (replaces the static
+    # `workspace = N, monitor:…` binds that used to live in general.conf).
+    _mon_sig = tuple(m["name"] for m in _state["hypr"].get("monitors", []))
+    await hypr.apply_monitor_mapping(_state["hypr"].get("monitors", []))
     _state["telemetry"] = await telemetry.snapshot()
     _state["audio"] = await audio.snapshot()
     _state["sysinfo"] = await sysinfo.snapshot()
@@ -173,12 +186,12 @@ async def audio_mute(payload: dict, _=Depends(auth.require_auth)):
 
 @app.post("/audio/sink")
 async def audio_sink(payload: dict, _=Depends(auth.require_auth)):
-    return JSONResponse({"ok": await audio.set_sink(payload.get("name", ""))})
+    return JSONResponse({"ok": await audio.set_sink(payload.get("id"))})
 
 
 @app.post("/audio/source")
 async def audio_source(payload: dict, _=Depends(auth.require_auth)):
-    return JSONResponse({"ok": await audio.set_source(payload.get("name", ""))})
+    return JSONResponse({"ok": await audio.set_source(payload.get("id"))})
 
 
 @app.post("/media/{act}")
@@ -233,6 +246,18 @@ async def modes_list(_=Depends(auth.require_auth)):
 @app.post("/modes/run")
 async def modes_run(payload: dict, _=Depends(auth.require_auth)):
     return JSONResponse(await modes.run(payload.get("id", "")))
+
+
+# ---- context strip ---------------------------------------------------------
+@app.get("/context")
+async def context_config(_=Depends(auth.require_auth)):
+    return JSONResponse(context.listing())
+
+
+@app.post("/context/key")
+async def context_key(payload: dict, _=Depends(auth.require_auth)):
+    return JSONResponse({"ok": await hypr.send_shortcut(
+        payload.get("cls", ""), payload.get("key", ""), payload.get("mods", ""))})
 
 
 # ---- in-deck config editing ------------------------------------------------

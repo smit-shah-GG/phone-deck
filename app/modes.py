@@ -18,9 +18,34 @@ from __future__ import annotations
 import asyncio
 import json
 
+import psutil
+
 from . import config
 
 MODES_FILE = config.CONFIG_DIR / "modes.json"
+
+# Shells whose mere presence under a terminal doesn't count as "live work".
+_SHELLS = {"fish", "bash", "zsh", "sh", "dash", "-fish", "-bash", "-zsh", "-sh"}
+
+
+def _has_live_child(pid: int) -> bool:
+    """Macro-guard: True (keep the window) if a terminal has any non-shell descendant
+    — ssh, vim, a build, python/JAX, zellij (so cockpit's session is protected). This
+    is a fail-safe brake: it only *stops* a close, never starts one, and returns True
+    on any uncertainty (process gone / not inspectable) so we never nuke live work.
+    """
+    if not pid:
+        return True
+    try:
+        for child in psutil.Process(pid).children(recursive=True):
+            try:
+                if child.name() not in _SHELLS:
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                return True  # can't tell -> fail safe
+        return False
+    except (psutil.Error, OSError):
+        return True
 
 
 def _load() -> dict:
@@ -102,12 +127,18 @@ async def run(mode_id: str) -> dict:
         elif t == "close":
             cls = step.get("match")
             only = set(step.get("workspaces", []))
-            n = 0
+            n = kept = 0
             for c in await _clients():
                 if c.get("class") == cls and (not only or c.get("workspace", {}).get("id") in only):
+                    if _has_live_child(c.get("pid", 0)):   # macro-guard: don't nuke live work
+                        kept += 1
+                        continue
                     await _dispatch("closewindow", f"address:{c['address']}")
                     n += 1
-            done.append(f"close {cls} x{n}" + (f" on {sorted(only)}" if only else ""))
+            msg = f"close {cls} x{n}" + (f" on {sorted(only)}" if only else "")
+            if kept:
+                msg += f" · kept {kept} (live)"
+            done.append(msg)
         elif t == "move":
             cls = step.get("match")
             ws = int(step["workspace"])

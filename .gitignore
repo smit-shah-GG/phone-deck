@@ -14,6 +14,10 @@ commands.json
 modes.json
 *.bak
 
+# Internal design/rationale docs (personal infra details + private notes).
+# `docs/` is left free for future *public* documentation.
+docs_internal/
+
 # Editor / OS
 .DS_Store
 *.swp

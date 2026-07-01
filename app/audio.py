@@ -7,11 +7,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 import urllib.parse
 import urllib.request
 
 _PCT = re.compile(r"(\d+)%")
+
+# The deck's own capture tools — never counted as a "call" recorder.
+_DECK_CAPTURE = {"parec", "pacat"}
 
 
 async def _out(*args: str) -> str:
@@ -36,22 +40,66 @@ async def _fire(*args: str) -> bool:
         return False
 
 
+async def _pw_audio_nodes() -> tuple[list[dict], list[dict]]:
+    """(sinks, sources) from native PipeWire via pw-dump. The deck reads devices here
+    rather than `pactl` because the pulse-compat layer intermittently lags Bluetooth
+    devices (the working reference, quickshell, also reads native PipeWire). Each entry
+    is {id, name (raw node.name, for default-matching), desc (friendly label)}.
+    """
+    out = await _out("pw-dump")
+    sinks: list[dict] = []
+    sources: list[dict] = []
+    try:
+        objs = json.loads(out) if out else []
+    except ValueError:
+        return [], []
+    for o in objs:
+        if o.get("type") != "PipeWire:Interface:Node":
+            continue
+        p = (o.get("info") or {}).get("props") or {}
+        mc = p.get("media.class", "")
+        name = p.get("node.name", "")
+        entry = {"id": o.get("id"), "name": name, "desc": p.get("node.description") or name}
+        if mc == "Audio/Sink":
+            sinks.append(entry)
+        elif mc == "Audio/Source":
+            sources.append(entry)
+    return sinks, sources
+
+
+async def _recording_apps() -> list[str]:
+    """Binaries/names currently recording (PipeWire source-outputs), minus the deck's
+    own capture. The client matches these against the configurable call-app allowlist
+    to decide whether a call is live — keeping audio.py free of context coupling.
+    """
+    out = await _out("pactl", "list", "source-outputs")
+    apps: list[str] = []
+    for block in out.split("Source Output #")[1:]:
+        binary = name = ""
+        for line in block.splitlines():
+            s = line.strip()
+            if s.startswith("application.process.binary"):
+                binary = s.split("=", 1)[1].strip().strip('"')
+            elif s.startswith("application.name"):
+                name = s.split("=", 1)[1].strip().strip('"')
+        ident = binary or name
+        if ident and ident not in _DECK_CAPTURE:
+            apps.append(ident)
+    return sorted(set(apps))
+
+
 async def snapshot() -> dict:
     vol_raw = await _out("pactl", "get-sink-volume", "@DEFAULT_SINK@")
     m = _PCT.search(vol_raw)
     default_sink = (await _out("pactl", "get-default-sink")).strip()
-    sinks = []
-    for line in (await _out("pactl", "list", "short", "sinks")).splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            sinks.append({"name": parts[1], "active": parts[1] == default_sink})
     default_source = (await _out("pactl", "get-default-source")).strip()
-    sources = []
-    for line in (await _out("pactl", "list", "short", "sources")).splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            sources.append({"name": parts[1], "active": parts[1] == default_source,
-                            "monitor": parts[1].endswith(".monitor")})
+    pw_sinks, pw_sources = await _pw_audio_nodes()
+    # name = friendly label for display; id drives set-default (wpctl); raw node.name
+    # decides which is active.
+    sinks = [{"id": s["id"], "name": s["desc"], "active": s["name"] == default_sink}
+             for s in pw_sinks]
+    sources = [{"id": s["id"], "name": s["desc"], "active": s["name"] == default_source}
+               for s in pw_sources]
     np = (await _out("playerctl", "metadata", "--format", "{{status}}|{{artist}} - {{title}}")).strip()
     status, _, title = np.partition("|")
     art_url = await _art_url()
@@ -61,6 +109,7 @@ async def snapshot() -> dict:
         "mic_muted": "yes" in (await _out("pactl", "get-source-mute", "@DEFAULT_SOURCE@")),
         "sinks": sinks,
         "sources": sources,
+        "recording": await _recording_apps(),
         "now_playing": {
             "status": status,
             "title": title.strip(" -"),
@@ -81,12 +130,14 @@ async def toggle_mute(target: str) -> bool:
     return await _fire("pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle")
 
 
-async def set_sink(name: str) -> bool:
-    return await _fire("pactl", "set-default-sink", name)
+async def set_sink(node_id) -> bool:
+    # Native PipeWire set-default by node id (same source of truth as enumeration).
+    # @DEFAULT_SINK@ (used by volume/mute) follows this, so pactl control still works.
+    return await _fire("wpctl", "set-default", str(int(node_id)))
 
 
-async def set_source(name: str) -> bool:
-    return await _fire("pactl", "set-default-source", name)
+async def set_source(node_id) -> bool:
+    return await _fire("wpctl", "set-default", str(int(node_id)))
 
 
 async def media(action: str) -> bool:

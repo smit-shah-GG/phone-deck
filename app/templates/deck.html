@@ -20,6 +20,9 @@
       padding-right: 1.6rem;
     }
     .sel option { background: #18181b; color: #e4e2e3; }
+    /* responsive density: tighten chrome a touch on a fine-pointer wide screen (laptop) */
+    html[data-pointer="fine"][data-wide="1"] .tab { padding-top: .3rem; padding-bottom: .3rem; }
+    html[data-pointer="fine"][data-wide="1"] #ctx-strip { height: 1.85rem; }
   </style>
 </head>
 <body class="bg-black text-zinc-100 h-screen overflow-hidden select-none">
@@ -31,16 +34,20 @@
     <span id="st-aud" class="text-zinc-400">♪ —</span>
     <span id="st-ws"  class="text-zinc-400 ml-auto">—</span>
     <span id="st-conn" class="w-2 h-2 rounded-full bg-zinc-600" title="link"></span>
+    <span id="st-bat" class="text-zinc-400 tabular-nums hidden" title="phone battery"></span>
     <span id="st-clock" class="text-zinc-300 tabular-nums">--:--</span>
+    <button id="reload-btn" class="text-zinc-500 px-1 text-base" title="reload">⟳</button>
     <button id="fs-btn" class="text-zinc-500 px-1 text-base" title="fullscreen">⛶</button>
   </header>
+
+  <!-- context strip (surface-only: call · media · focused-app controls; persists even when empty) -->
+  <div id="ctx-strip" class="flex items-center gap-1 px-2 h-8 bg-zinc-900/70 border-b border-zinc-800 overflow-x-auto whitespace-nowrap"></div>
 
   <!-- tabs -->
   <nav class="flex gap-1 px-2 py-1 bg-zinc-950/60 text-xs uppercase tracking-wider">
     <button data-tab="workspaces"  class="tab px-3 py-1 rounded bg-zinc-800">Workspaces</button>
     <button data-tab="remote"      class="tab px-3 py-1 rounded text-zinc-500">Remote</button>
     <button data-tab="modes"       class="tab px-3 py-1 rounded text-zinc-500">Modes</button>
-    <button data-tab="performance" class="tab px-3 py-1 rounded text-zinc-500">Performance</button>
     <button data-tab="commands"    class="tab px-3 py-1 rounded text-zinc-500">Commands</button>
     <button data-tab="audio"       class="tab px-3 py-1 rounded text-zinc-500">Audio</button>
     <button data-tab="stream"      class="tab px-3 py-1 rounded text-zinc-500">Stream</button>
@@ -49,12 +56,12 @@
     <button data-tab="config"      class="tab px-3 py-1 rounded text-zinc-500">Config</button>
   </nav>
 
-  <main class="p-3 h-[calc(100%-5.5rem)] overflow-auto">
+  <main class="p-3 h-[calc(100%-7.5rem)] overflow-auto">
     <!-- Workspaces -->
     <section data-page="workspaces" class="grid grid-cols-3 gap-3 items-start"></section>
 
     <!-- Remote input (mouse left · keyboard right) -->
-    <section data-page="remote" class="hidden grid grid-cols-2 gap-3 h-[calc(100vh-9rem)]">
+    <section data-page="remote" class="hidden grid grid-cols-2 gap-3 h-[calc(100vh-11rem)]">
       <!-- mouse -->
       <div class="flex flex-col gap-2">
         <div id="trackpad" class="flex-1 bg-zinc-900 rounded-xl flex items-center justify-center text-center text-zinc-600 text-xs px-4 touch-none">
@@ -99,24 +106,6 @@
     <section data-page="modes" class="hidden space-y-3">
       <div id="mode-grid" class="grid grid-cols-3 gap-3"></div>
       <pre id="mode-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-400 whitespace-pre-wrap overflow-auto max-h-64"></pre>
-    </section>
-
-    <!-- Performance -->
-    <section data-page="performance" class="hidden space-y-4 max-w-xl">
-      <div class="flex gap-2">
-        <button class="act flex-1 bg-zinc-800 rounded-lg py-4" data-action="governor_performance">Governor: Performance</button>
-        <button class="act flex-1 bg-zinc-800 rounded-lg py-4" data-action="governor_powersave">Governor: Powersave</button>
-      </div>
-      <div class="flex gap-2">
-        <button class="act flex-1 bg-zinc-800 rounded-lg py-3" data-action="turbo_on">Turbo On</button>
-        <button class="act flex-1 bg-zinc-800 rounded-lg py-3" data-action="turbo_off">Turbo Off</button>
-      </div>
-      <div class="bg-zinc-900 rounded-lg p-4">
-        <label class="text-sm text-zinc-400">GPU power limit: <span id="pl-val">170</span> W</label>
-        <input id="pl-slider" type="range" min="100" max="170" value="170" class="w-full mt-2">
-        <button class="act mt-3 bg-emerald-700 rounded-lg px-4 py-2" data-action="gpu_power_limit" data-param="watts:pl-slider">Apply</button>
-      </div>
-      <p id="act-result" class="text-xs text-zinc-500"></p>
     </section>
 
     <!-- Commands / Deploy -->
@@ -165,6 +154,7 @@
       <div class="space-y-3">
         <div id="ts-status" class="bg-zinc-900 rounded-lg p-3 text-sm text-zinc-400">Tailscale —</div>
         <div class="grid grid-cols-2 gap-2">
+          <button class="act col-span-2 bg-emerald-700 rounded-lg py-3 font-medium" data-action="perfmode">🚀 Perf Mode</button>
           <button class="sys bg-zinc-800 rounded-lg py-3" data-sys="lock">Lock</button>
           <button class="act bg-zinc-800 rounded-lg py-3" data-action="nm_restart" data-confirm="Restart NetworkManager?">Restart NM</button>
           <button class="act bg-amber-900/70 rounded-lg py-3" data-action="suspend" data-confirm="Suspend the host?">Suspend</button>
@@ -180,7 +170,7 @@
     </section>
 
     <!-- Audio streaming (bidirectional) -->
-    <section data-page="stream" class="hidden flex gap-3 items-start h-[calc(100vh-9rem)]">
+    <section data-page="stream" class="hidden flex gap-3 items-start h-[calc(100vh-11rem)]">
       <div class="bg-zinc-900 rounded-lg p-4 space-y-3 w-72 shrink-0">
         <div class="flex items-center gap-2">
           <span id="stream-dot" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
@@ -202,7 +192,9 @@
           <button id="stream-connect" class="flex-1 bg-emerald-600 rounded-lg py-3 font-medium">Connect</button>
           <button id="stream-stop" class="flex-1 bg-zinc-800 rounded-lg py-3">Stop</button>
         </div>
+        <button id="stream-capture" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">🔒 Lock input → rig (mouse + keys)</button>
         <p class="text-xs text-zinc-500">Mic shows up on the rig as input <b>“Monitor of PhoneDeckMic”</b> — select it in the app you want to use it in. Headphones recommended to avoid echo. Keep this screen foreground.</p>
+        <p class="text-xs text-zinc-600"><b>Lock input</b> (with video on): the cursor is captured and keystrokes go to the rig — a wireless kb+mouse+screen. <b>Esc</b> releases (so Esc can’t be sent while locked; use the on-screen Esc).</p>
       </div>
       <audio id="stream-audio" autoplay playsinline></audio>
       <video id="stream-video-el" autoplay playsinline muted class="flex-1 min-w-0 max-h-full rounded-lg bg-black object-contain hidden touch-none cursor-crosshair"></video>
@@ -233,11 +225,12 @@
       <div class="flex items-center gap-2">
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="commands">commands.json</button>
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="modes">modes.json</button>
+        <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="context">context.json</button>
         <span id="cfg-status" class="text-xs flex-1"></span>
         <button id="cfg-save" class="bg-emerald-600 rounded px-4 py-1 text-sm font-medium">Save</button>
       </div>
       <textarea id="cfg-text" spellcheck="false" autocapitalize="off" autocomplete="off"
-        class="w-full h-[calc(100vh-11rem)] bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-xs leading-relaxed focus:outline-none focus:border-emerald-600"></textarea>
+        class="w-full h-[calc(100vh-13rem)] bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-xs leading-relaxed focus:outline-none focus:border-emerald-600"></textarea>
     </section>
   </main>
 

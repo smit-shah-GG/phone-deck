@@ -14,6 +14,7 @@ from . import config
 EDITABLE = {
     "commands": config.CONFIG_DIR / "commands.json",
     "modes": config.CONFIG_DIR / "modes.json",
+    "context": config.CONFIG_DIR / "context.json",
 }
 
 

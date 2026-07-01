@@ -5,6 +5,8 @@ const WS_COUNT = 15;  // number of workspaces shown per monitor
 let volDragging = false;
 let lastState = {};   // most recent WS state, for re-render after async fetches
 let brightness = {};  // {monitor: pct}, fetched on demand (ddcutil is slow)
+let videoCaptured = false;  // Stream "Lock input" (Pointer Lock) active -> relative input
+let mainSock = null;        // the live-state WebSocket (hoisted so visibility can revive it)
 
 async function fetchBrightness() {
   try {
@@ -21,7 +23,12 @@ async function keepAwake() {
   try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (_) {}
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") keepAwake();
+  if (document.visibilityState !== "visible") return;
+  keepAwake();
+  // Backgrounded PWAs get their timers throttled, so the 2s auto-reconnect may not fire
+  // while suspended — the UI can come back frozen on a dead socket. Revive on resume.
+  if (!mainSock || mainSock.readyState > 1) connect();        // 2=CLOSING, 3=CLOSED
+  if (!inputSock || inputSock.readyState > 1) connectInput();
 });
 keepAwake();
 if (screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {});
@@ -32,6 +39,28 @@ if (fsBtn) fsBtn.onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen().catch(() => {});
 };
+
+const reloadBtn = document.getElementById("reload-btn");
+if (reloadBtn) reloadBtn.onclick = () => location.reload();
+
+// phone battery in the top bar (Battery Status API reports the device running the
+// browser = the phone). Chromium-only + secure-context; where it's unavailable the chip
+// stays hidden (graceful).
+(function initBattery() {
+  const el = document.getElementById("st-bat");
+  if (!el || !navigator.getBattery) return;
+  navigator.getBattery().then((bat) => {
+    const render = () => {
+      const pct = Math.round(bat.level * 100);
+      el.textContent = `${bat.charging ? "⚡" : "🔋"}${pct}%`;
+      el.classList.toggle("text-red-400", !bat.charging && pct <= 15);
+      el.classList.remove("hidden");
+    };
+    render();
+    bat.addEventListener("levelchange", render);
+    bat.addEventListener("chargingchange", render);
+  }).catch(() => {});
+})();
 
 // ---- helpers ----
 async function post(url, body) {
@@ -121,8 +150,10 @@ if (cfgSave) cfgSave.onclick = async () => {
   const status = document.getElementById("cfg-status");
   status.textContent = "saving…"; status.className = "text-xs flex-1 text-zinc-400";
   const res = await post(`/config/${cfgCurrent}`, { text: document.getElementById("cfg-text").value });
-  if (res && res.ok) { status.textContent = "✓ saved"; status.className = "text-xs flex-1 text-emerald-400"; }
-  else { status.textContent = `✗ ${res ? res.error : "failed"}`; status.className = "text-xs flex-1 text-red-400"; }
+  if (res && res.ok) {
+    status.textContent = "✓ saved"; status.className = "text-xs flex-1 text-emerald-400";
+    if (cfgCurrent === "context") loadContextConfig();   // strip reflects edits without a reload
+  } else { status.textContent = `✗ ${res ? res.error : "failed"}`; status.className = "text-xs flex-1 text-red-400"; }
 };
 
 // ---- privileged actions (Performance + System) ----
@@ -140,9 +171,6 @@ document.querySelectorAll(".act").forEach((btn) => {
     setResult(btn.closest('[data-page="system"]') ? "sys-result" : "act-result", res);
   };
 });
-
-const plSlider = document.getElementById("pl-slider");
-if (plSlider) plSlider.oninput = () => (document.getElementById("pl-val").textContent = plSlider.value);
 
 // ---- audio / media ----
 document.querySelectorAll("[data-mute]").forEach((b) =>
@@ -190,6 +218,7 @@ async function loadCommands() {
 // ---- remote input (keyboard + trackpad over a dedicated WS) ----
 let inputSock = null;
 function connectInput() {
+  if (inputSock && inputSock.readyState <= 1) return;   // already open/connecting — no dupes
   const proto = location.protocol === "https:" ? "wss" : "ws";
   inputSock = new WebSocket(`${proto}://${location.host}/ws/input`);
   inputSock.onclose = () => setTimeout(connectInput, 2000);
@@ -202,45 +231,57 @@ function sendInput(o) {
   const tp = document.getElementById("trackpad");
   if (!tp) return;
   const SENS = 3.0, ACCEL = 0.06;  // base gain + acceleration (faster swipe = farther)
-  let last = null, moved = false, startT = 0, two = false, scrollY = null;
+  // Pointer Events so the trackpad works from touch AND a laptop mouse. The gesture
+  // logic mirrors the old touch handlers exactly: 1 pointer = move/tap-left, 2 pointers
+  // = scroll/tap-right; plus a wheel handler for mouse scroll.
+  const pts = new Map();   // pointerId -> {x, y}
+  let moved = false, startT = 0, wasTwo = false, scrollY = null;
 
-  tp.addEventListener("touchstart", (ev) => {
-    if (ev.touches.length === 1) {
-      last = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
-      moved = false; startT = Date.now(); two = false;
-    } else if (ev.touches.length === 2) {
-      two = true;
-      scrollY = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
-    }
-  }, { passive: false });
-
-  tp.addEventListener("touchmove", (ev) => {
+  tp.addEventListener("pointerdown", (ev) => {
     ev.preventDefault();
-    if (ev.touches.length === 2) {
-      const y = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+    tp.setPointerCapture?.(ev.pointerId);
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pts.size === 1) { moved = false; startT = Date.now(); wasTwo = false; }
+    else if (pts.size === 2) {
+      wasTwo = true;
+      const a = [...pts.values()];
+      scrollY = (a[0].y + a[1].y) / 2;
+    }
+  });
+
+  tp.addEventListener("pointermove", (ev) => {
+    const prev = pts.get(ev.pointerId);
+    if (!prev) return;
+    ev.preventDefault();
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pts.size >= 2) {
+      const a = [...pts.values()];
+      const y = (a[0].y + a[1].y) / 2;
       if (scrollY != null) {
         const d = y - scrollY;
         if (Math.abs(d) > 3) { sendInput({ t: "scroll", dy: d < 0 ? 1 : -1 }); scrollY = y; }
       }
       return;
     }
-    if (last && ev.touches.length === 1) {
-      const t = ev.touches[0], dx = t.clientX - last.x, dy = t.clientY - last.y;
-      if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-      const f = SENS * (1 + Math.hypot(dx, dy) * ACCEL);
-      sendInput({ t: "move", dx: Math.round(dx * f), dy: Math.round(dy * f) });
-      last = { x: t.clientX, y: t.clientY };
-    }
-  }, { passive: false });
+    const dx = ev.clientX - prev.x, dy = ev.clientY - prev.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+    const f = SENS * (1 + Math.hypot(dx, dy) * ACCEL);
+    sendInput({ t: "move", dx: Math.round(dx * f), dy: Math.round(dy * f) });
+  });
 
-  tp.addEventListener("touchend", (ev) => {
-    if (two) {
-      if (!moved && ev.touches.length === 0 && Date.now() - startT < 250) sendInput({ t: "click", b: "right" });
-      if (ev.touches.length === 0) { two = false; scrollY = null; }
-      return;
-    }
-    if (!moved && Date.now() - startT < 250) sendInput({ t: "click", b: "left" });
-    last = null;
+  function tpUp(ev) {
+    if (!pts.has(ev.pointerId)) return;
+    pts.delete(ev.pointerId);
+    if (pts.size > 0) return;                 // wait for the last pointer to lift
+    const quick = Date.now() - startT < (wasTwo ? 300 : 250);
+    if (!moved && quick) sendInput({ t: "click", b: wasTwo ? "right" : "left" });
+    wasTwo = false; scrollY = null;
+  }
+  tp.addEventListener("pointerup", tpUp);
+  tp.addEventListener("pointercancel", tpUp);
+  tp.addEventListener("wheel", (ev) => {        // mouse wheel -> scroll
+    ev.preventDefault();
+    sendInput({ t: "scroll", dy: ev.deltaY < 0 ? 1 : -1 });
   }, { passive: false });
 
   document.querySelectorAll("[data-click]").forEach((b) =>
@@ -376,14 +417,14 @@ async function streamConnect() {
   function vsend(t, ev) { const p = vfrac(ev); if (p) sendInput({ t, monitor: vmon(), fx: p.fx, fy: p.fy }); }
   let vDown = false, vMoved = false, vDrag = false, vStart = null, vTimer = null, vLast = 0;
   vid.addEventListener("pointerdown", (ev) => {
-    if (!vid.srcObject) return;
+    if (!vid.srcObject || videoCaptured) return;   // capture mode uses relative input instead
     ev.preventDefault(); vid.setPointerCapture(ev.pointerId);
     vDown = true; vMoved = false; vDrag = false; vStart = { x: ev.clientX, y: ev.clientY };
     vsend("vmove", ev);
     vTimer = setTimeout(() => { if (vDown && !vMoved) { vsend("vrclick", ev); vDown = false; } }, 500);
   });
   vid.addEventListener("pointermove", (ev) => {
-    if (!vDown) return;
+    if (!vDown || videoCaptured) return;
     if (!vMoved && Math.hypot(ev.clientX - vStart.x, ev.clientY - vStart.y) > 6) {
       vMoved = true; vDrag = true; clearTimeout(vTimer); vsend("vdown", ev);
     }
@@ -398,6 +439,67 @@ async function streamConnect() {
   }
   vid.addEventListener("pointerup", vEnd);
   vid.addEventListener("pointercancel", vEnd);
+})();
+
+// ---- capture mode: "Lock input" on Stream (laptop becomes kb+mouse+screen) ----
+(function initCapture() {
+  const btn = document.getElementById("stream-capture");
+  const vid = document.getElementById("stream-video-el");
+  if (!btn || !vid) return;
+  const SPECIAL = {
+    Enter: "enter", Escape: "esc", Tab: "tab", Backspace: "backspace", Delete: "delete",
+    ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+    Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown", " ": "space",
+  };
+
+  btn.onclick = () => {
+    if (!vid.srcObject) { document.getElementById("stream-status").textContent = "turn video on first"; return; }
+    vid.requestPointerLock?.();
+  };
+  document.addEventListener("pointerlockchange", () => {
+    videoCaptured = document.pointerLockElement === vid;
+    btn.textContent = videoCaptured ? "🔓 Locked — Esc to release" : "🔒 Lock input → rig (mouse + keys)";
+    btn.classList.toggle("bg-emerald-700", videoCaptured);
+    btn.classList.toggle("text-zinc-400", !videoCaptured);
+    btn.classList.toggle("bg-zinc-800", !videoCaptured);
+  });
+
+  // relative mouse + clicks + wheel while captured (reuses the existing hid vocab)
+  vid.addEventListener("mousemove", (ev) => {
+    if (videoCaptured && (ev.movementX || ev.movementY))
+      sendInput({ t: "move", dx: ev.movementX, dy: ev.movementY });
+  });
+  vid.addEventListener("mousedown", (ev) => {
+    if (!videoCaptured) return;
+    ev.preventDefault();
+    sendInput({ t: "click", b: ev.button === 2 ? "right" : ev.button === 1 ? "middle" : "left" });
+  });
+  vid.addEventListener("contextmenu", (ev) => { if (videoCaptured) ev.preventDefault(); });
+  vid.addEventListener("wheel", (ev) => {
+    if (!videoCaptured) return;
+    ev.preventDefault();
+    sendInput({ t: "scroll", dy: ev.deltaY < 0 ? 1 : -1 });
+  }, { passive: false });
+
+  // keyboard forward while captured. Esc can't be sent — it releases Pointer Lock.
+  window.addEventListener("keydown", (ev) => {
+    if (!videoCaptured) return;
+    ev.preventDefault();
+    const k = ev.key;
+    const mods = [];
+    if (ev.ctrlKey) mods.push("ctrl");
+    if (ev.altKey) mods.push("alt");
+    if (ev.metaKey) mods.push("super");
+    if (mods.length) {                                  // chord -> combo
+      let base = SPECIAL[k] || (k.length === 1 ? k.toLowerCase() : null);
+      if (ev.shiftKey) mods.push("shift");
+      if (base) sendInput({ t: "combo", keys: [...mods, base] });
+    } else if (SPECIAL[k]) {                            // named key (+ optional shift)
+      sendInput({ t: "key", name: SPECIAL[k], mods: ev.shiftKey ? ["shift"] : [] });
+    } else if (k.length === 1) {                        // printable -> text (handles case)
+      sendInput({ t: "text", s: k });
+    }
+  });
 })();
 
 // ---- modes / scenes ----
@@ -507,15 +609,14 @@ function renderAudio(s) {
   }
   document.getElementById("sink-list").innerHTML = (a.sinks || []).map((d) =>
     `<button class="sink w-full text-left text-sm rounded-lg px-3 py-2 truncate
-      ${d.active ? "bg-emerald-700" : "bg-zinc-800"}" data-sink="${d.name}">${d.name}</button>`).join("");
+      ${d.active ? "bg-emerald-700" : "bg-zinc-800"}" data-id="${d.id}">${d.name}</button>`).join("");
   document.querySelectorAll(".sink").forEach((b) =>
-    (b.onclick = () => post("/audio/sink", { name: b.dataset.sink })));
+    (b.onclick = () => post("/audio/sink", { id: Number(b.dataset.id) })));
   document.getElementById("source-list").innerHTML = (a.sources || []).map((d) =>
     `<button class="source w-full text-left text-sm rounded-lg px-3 py-2 truncate
-      ${d.active ? "bg-emerald-700" : "bg-zinc-800"}" data-source="${d.name}">${d.name}${
-      d.monitor ? ' <span class="text-zinc-500">(monitor)</span>' : ""}</button>`).join("");
+      ${d.active ? "bg-emerald-700" : "bg-zinc-800"}" data-id="${d.id}">${d.name}</button>`).join("");
   document.querySelectorAll(".source").forEach((b) =>
-    (b.onclick = () => post("/audio/source", { name: b.dataset.source })));
+    (b.onclick = () => post("/audio/source", { id: Number(b.dataset.id) })));
 }
 
 function renderSystem(s) {
@@ -533,25 +634,116 @@ function renderSystem(s) {
     (b.onclick = () => b.disabled || post("/sys/kill", { pid: Number(b.dataset.pid) })));
 }
 
+// ---- context strip (surface-only: call · media · in-app controls) ----
+let ctxConfig = { apps: {}, call_apps: [] };
+async function loadContextConfig() {
+  try { ctxConfig = await (await fetch("/context")).json(); } catch (_) {}
+}
+function ctxLoose(a, b) { return a === b || a.includes(b) || b.includes(a); }
+function ctxBtn(label, handler, extra) {
+  const b = document.createElement("button");
+  b.className = "shrink-0 rounded px-2 py-0.5 text-xs " + (extra || "bg-zinc-800");
+  b.textContent = label; b.onclick = handler;
+  return b;
+}
+function ctxGroup(first) {
+  const g = document.createElement("div");
+  g.className = "flex items-center gap-1 shrink-0 " + (first
+    ? "sticky left-0 z-10 bg-zinc-900/95 pr-1"
+    : "ml-1 pl-1 border-l border-zinc-700/50");
+  return g;
+}
+function ctxLabel(text, cls) {
+  const s = document.createElement("span");
+  s.className = "px-1 text-xs " + (cls || "text-zinc-500");
+  s.textContent = text;
+  return s;
+}
+
+function renderContext(s) {
+  const strip = document.getElementById("ctx-strip");
+  if (!strip) return;
+  strip.innerHTML = "";
+  const wins = s.hypr?.windows || [];
+  const focusedCls = s.hypr?.active_window?.class || "";
+  let first = true;
+
+  // 1) Call — pinned hard-left, never scrolls off
+  const calls = (ctxConfig.call_apps || []);
+  const rec = (s.audio?.recording || []).filter((r) => calls.some((a) => ctxLoose(r, a)));
+  if (rec.length) {
+    const g = ctxGroup(first); first = false;
+    g.appendChild(ctxLabel("📞", "text-emerald-400"));
+    g.appendChild(ctxBtn(s.audio?.mic_muted ? "🔇 mic" : "🎙 mute",
+      () => post("/audio/mute", { target: "mic" }),
+      s.audio?.mic_muted ? "bg-red-800" : "bg-zinc-800"));
+    const callWin = wins.find((w) => rec.some((r) => w.cls && ctxLoose(w.cls, r)));
+    if (callWin) g.appendChild(ctxBtn("↪ call", () => post("/hypr/focus", { address: callWin.address })));
+    strip.appendChild(g);
+  }
+
+  // 2) Media / now-playing — generic MPRIS, surfaced strip-wide
+  const np = s.audio?.now_playing;
+  if (np && np.title) {
+    const g = ctxGroup(first); first = false;
+    const t = ctxLabel((np.status === "Playing" ? "▶ " : "⏸ ") + np.title, "text-zinc-400");
+    t.classList.add("max-w-[10rem]", "truncate");
+    g.appendChild(t);
+    g.appendChild(ctxBtn("⏮", () => post("/media/previous")));
+    g.appendChild(ctxBtn("⏯", () => post("/media/play-pause")));
+    g.appendChild(ctxBtn("⏭", () => post("/media/next")));
+    strip.appendChild(g);
+  }
+
+  // 3) In-app controls — config-driven, keyed by window class, via sendshortcut
+  for (const [cls, app] of Object.entries(ctxConfig.apps || {})) {
+    const present = app.show === "persist"
+      ? wins.some((w) => w.cls === cls)
+      : focusedCls === cls;
+    if (!present) continue;
+    const g = ctxGroup(first); first = false;
+    g.appendChild(ctxLabel(app.label || cls));
+    (app.controls || []).forEach((c) =>
+      g.appendChild(ctxBtn(c.label || c.key,
+        () => post("/context/key", { cls, key: c.key, mods: c.mods || "" }))));
+    strip.appendChild(g);
+  }
+}
+
 function render(s) {
   lastState = s;
   renderStatus(s);
+  renderContext(s);
   renderWorkspaces(s);
   renderAudio(s);
   renderSystem(s);
 }
 
 function connect() {
+  if (mainSock && mainSock.readyState <= 1) return;   // already open/connecting — no dupes
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const sock = new WebSocket(`${proto}://${location.host}/ws`);
+  mainSock = sock;
   const dot = document.getElementById("st-conn");
   sock.onopen = () => dot.classList.replace("bg-zinc-600", "bg-emerald-500");
   sock.onclose = () => { dot.classList.replace("bg-emerald-500", "bg-zinc-600"); setTimeout(connect, 2000); };
   sock.onmessage = (e) => render(JSON.parse(e.data));
 }
+// responsive density: tag <html> so the UI can adapt to a fine-pointer / wide screen
+// (laptop) vs the phone. Deliberately light — deeper restyling rides with the deferred
+// visuals refresh; this just enables it without aggressive layout changes.
+function applyDensity() {
+  document.documentElement.dataset.pointer =
+    window.matchMedia("(pointer: fine)").matches ? "fine" : "coarse";
+  document.documentElement.dataset.wide = window.innerWidth >= 1024 ? "1" : "0";
+}
+applyDensity();
+window.addEventListener("resize", applyDensity);
+
 connect();
 connectInput();
 fetchBrightness();
+loadContextConfig();
 
 setInterval(() => {
   document.getElementById("st-clock").textContent =

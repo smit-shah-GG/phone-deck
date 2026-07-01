@@ -9,15 +9,16 @@ this table decides what actually executes.
 
 from __future__ import annotations
 
-GPU_MIN_WATTS = 100
-GPU_MAX_WATTS = 170  # adjust to your GPU's max (see `nvidia-smi -q -d POWER`)
-
-
-def _gpu_power_limit(params):
-    watts = int(params["watts"])
-    if not (GPU_MIN_WATTS <= watts <= GPU_MAX_WATTS):
-        raise ValueError(f"watts out of range [{GPU_MIN_WATTS}, {GPU_MAX_WATTS}]")
-    return ["nvidia-smi", "-pl", str(watts)]
+# Engage-only performance mode — mirrors the `perfmode on` fish ritual as one fixed,
+# param-free command (constant string -> no injection surface). Steps are chained with
+# `;` so a missing tool (e.g. nvidia-smi) doesn't block the rest.
+_PERFMODE_ON = (
+    "cpupower frequency-set -g performance; "
+    "echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo; "
+    "nvidia-smi -pm 1; "
+    "nvidia-smi -lgc 0,2100; "
+    "sysctl -q vm.swappiness=10"
+)
 
 
 # name -> {build: argv-builder(params)->list[str], schema: {param: type}, desc}
@@ -27,20 +28,11 @@ ACTIONS = {
         "schema": {},
         "desc": "Health check — no-op, confirms the daemon is reachable.",
     },
-    "governor_performance": {
-        "build": lambda p: ["cpupower", "frequency-set", "-g", "performance"],
+    "perfmode": {
+        "build": lambda p: ["sh", "-c", _PERFMODE_ON],
         "schema": {},
-        "desc": "Set intel_pstate governor to performance.",
-    },
-    "governor_powersave": {
-        "build": lambda p: ["cpupower", "frequency-set", "-g", "powersave"],
-        "schema": {},
-        "desc": "Set intel_pstate governor to powersave.",
-    },
-    "gpu_power_limit": {
-        "build": _gpu_power_limit,
-        "schema": {"watts": int},
-        "desc": f"Set RTX 3060 power limit ({GPU_MIN_WATTS}-{GPU_MAX_WATTS}W).",
+        "desc": "Engage performance mode: governor=performance, turbo on, GPU persistence "
+                "+ clocks locked, swappiness=10. Engage-only (no off).",
     },
     "suspend": {
         "build": lambda p: ["systemctl", "suspend"],
@@ -61,17 +53,6 @@ ACTIONS = {
         "build": lambda p: ["systemctl", "restart", "NetworkManager"],
         "schema": {},
         "desc": "Restart NetworkManager.",
-    },
-    # Constant sh -c strings (no params, no injection surface) — sysfs needs a redirect.
-    "turbo_on": {
-        "build": lambda p: ["sh", "-c", "echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo"],
-        "schema": {},
-        "desc": "Enable Intel turbo boost.",
-    },
-    "turbo_off": {
-        "build": lambda p: ["sh", "-c", "echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo"],
-        "schema": {},
-        "desc": "Disable Intel turbo boost.",
     },
     # New privileged actions go here. Keep argv as a list; validate every param.
 }
