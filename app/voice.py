@@ -86,6 +86,14 @@ def _transcribe(audio: "np.ndarray") -> str:
     return " ".join(s.text for s in segments).strip()
 
 
+def _transcribe_file(path: str) -> str:
+    # faster-whisper decodes the container (webm/opus, etc.) via PyAV — used for the
+    # device-mic path where the phone uploads a recorded clip.
+    model = _get_model()
+    segments, _ = model.transcribe(path, language="en", beam_size=1, vad_filter=True)
+    return " ".join(s.text for s in segments).strip()
+
+
 # ---- capture (rig default mic via parec) -----------------------------------
 _capture: dict | None = None
 
@@ -162,7 +170,26 @@ async def stop() -> dict:
     audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
     loop = asyncio.get_running_loop()
     text = await loop.run_in_executor(None, _transcribe, audio)
-    return await route(text)
+    return await plan(text)
+
+
+async def transcribe_upload(data: bytes) -> dict:
+    """Device-mic path: transcribe an uploaded audio clip (phone's own mic) -> plan."""
+    if len(data) < 1000:
+        return {"heard": "", "verb": None, "note": "(too short)", "plan": None}
+    fd, path = tempfile.mkstemp(suffix=".webm", prefix="deckvoice-up-")
+    os.close(fd)
+    try:
+        with open(path, "wb") as f:
+            f.write(data)
+        loop = asyncio.get_running_loop()
+        text = await loop.run_in_executor(None, _transcribe_file, path)
+    except OSError:
+        return {"heard": "", "verb": None, "note": "(upload failed)", "plan": None}
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+    return await plan(text)
 
 
 # ---- routing (pure/testable) ----------------------------------------------
@@ -197,45 +224,75 @@ def match_macro(payload: str, namespace: list[dict]) -> dict | None:
     return labels[m[0]] if m else None
 
 
-async def route(text: str) -> dict:
+async def plan(text: str) -> dict:
+    """Transcribed text -> a trace with an executable *plan* (or None). Never dispatches —
+    the caller surfaces the plan and only executes on explicit confirmation. This is the
+    carefulness that stops a mis-heard chord/macro from firing on its own."""
     cfg = load_config()
     text = (text or "").strip()
     if not text:
-        return {"heard": "", "verb": None, "note": "(nothing heard)"}
+        return {"heard": "", "verb": None, "note": "(nothing heard)", "plan": None}
     first, _, rest = text.partition(" ")
     rest = rest.strip()
     verb = match_verb(first, cfg.get("aliases", {}))
     if verb is None:
-        return {"heard": text, "verb": None, "note": f"no verb (first word: {first})"}
+        return {"heard": text, "verb": None, "note": f"no verb (first word: {first})", "plan": None}
 
     if verb == "type":
         folded = ascii_fold(rest)
-        if folded:
-            hid.handle({"t": "text", "s": folded})
-        return {"heard": text, "verb": "type", "result": f"typed: {folded}" if folded else "(nothing to type)"}
+        if not folded:
+            return {"heard": text, "verb": "type", "note": "(nothing to type)", "plan": None}
+        return {"heard": text, "verb": "type", "preview": f"type: {folded}",
+                "plan": {"lane": "type", "text": folded}}
 
     if verb == "input":
         phrase = match_input(rest, cfg.get("input", {}))
         if not phrase:
-            return {"heard": text, "verb": "input", "result": "no match"}
+            return {"heard": text, "verb": "input", "note": "no match", "plan": None}
         keys = cfg["input"][phrase]
-        hid.handle({"t": "combo", "keys": keys})
-        return {"heard": text, "verb": "input", "matched": phrase, "result": "+".join(keys)}
+        return {"heard": text, "verb": "input", "matched": phrase,
+                "preview": f"input: {phrase} → {'+'.join(keys)}",
+                "plan": {"lane": "input", "phrase": phrase, "keys": keys}}
 
     if verb == "macro":
         ns = _macro_namespace()
         hit = match_macro(rest, ns)
         if not hit:
             close = difflib.get_close_matches(rest.strip().lower(), [n["label"].lower() for n in ns], n=1, cutoff=0.0)
-            return {"heard": text, "verb": "macro", "result": "no match",
-                    "note": f"closest: {close[0]}" if close else "no macros defined"}
-        if hit["kind"] == "command" and hit["confirm"]:
-            return {"heard": text, "verb": "macro", "matched": hit["label"],
-                    "result": "needs confirm — run from Commands"}
-        res = await (modes.run(hit["id"]) if hit["kind"] == "mode" else commands.run(hit["id"]))
-        ok = res.get("ok")
-        return {"heard": text, "verb": "macro", "matched": hit["label"], "kind": hit["kind"],
-                "result": "ok" if ok else (res.get("error") or "failed")}
+            return {"heard": text, "verb": "macro", "plan": None,
+                    "note": f"no match (closest: {close[0]})" if close else "no macros defined"}
+        return {"heard": text, "verb": "macro", "matched": hit["label"],
+                "preview": f"macro: {hit['label']}" + (" (needs confirm)" if hit["confirm"] else ""),
+                "plan": {"lane": "macro", "kind": hit["kind"], "id": hit["id"],
+                         "label": hit["label"], "confirm": hit["confirm"]}}
 
     # verb == "jarvis"
-    return {"heard": text, "verb": "jarvis", "note": "jarvis arrives in Tier 2"}
+    return {"heard": text, "verb": "jarvis", "note": "jarvis arrives in Tier 2", "plan": None}
+
+
+async def execute(p: dict | None) -> dict:
+    """Dispatch a plan from plan(). Re-validates through the safe primitives — never
+    trusts the client blindly (macro ids are re-checked; keys/text go through hid)."""
+    if not isinstance(p, dict):
+        return {"ok": False, "result": "no plan"}
+    lane = p.get("lane")
+    if lane == "type":
+        text = str(p.get("text", ""))
+        if text:
+            hid.handle({"t": "text", "s": text})
+        return {"ok": True, "result": f"typed: {text}"}
+    if lane == "input":
+        keys = p.get("keys")
+        if not isinstance(keys, list) or not keys:
+            return {"ok": False, "result": "bad keys"}
+        hid.handle({"t": "combo", "keys": [str(k) for k in keys]})
+        return {"ok": True, "result": "+".join(str(k) for k in keys)}
+    if lane == "macro":
+        kind, cid = p.get("kind"), str(p.get("id", ""))
+        valid = ({m["id"] for m in modes.listing()} if kind == "mode"
+                 else {c["id"] for c in commands.listing()})
+        if cid not in valid:
+            return {"ok": False, "result": "unknown macro"}
+        res = await (modes.run(cid) if kind == "mode" else commands.run(cid))
+        return {"ok": bool(res.get("ok")), "result": "ok" if res.get("ok") else (res.get("error") or "failed")}
+    return {"ok": False, "result": "unknown lane"}

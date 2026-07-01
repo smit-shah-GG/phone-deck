@@ -271,6 +271,16 @@ async def voice_stop(_=Depends(auth.require_auth)):
     return JSONResponse(await voice.stop())
 
 
+@app.post("/voice/transcribe")               # device-mic path: phone uploads its own clip
+async def voice_transcribe(file: UploadFile = File(...), _=Depends(auth.require_auth)):
+    return JSONResponse(await voice.transcribe_upload(await file.read()))
+
+
+@app.post("/voice/execute")                  # dispatch a confirmed plan
+async def voice_execute(payload: dict, _=Depends(auth.require_auth)):
+    return JSONResponse(await voice.execute(payload.get("plan")))
+
+
 # ---- in-deck config editing ------------------------------------------------
 @app.get("/config/{name}")
 async def config_read(name: str, _=Depends(auth.require_auth)):

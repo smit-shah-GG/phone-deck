@@ -524,13 +524,18 @@ async function loadModes() {
   });
 }
 
-// ---- voice router (Tier 1): start/stop toggle + trace log ----
+// ---- voice router (Tier 1): mic selector + start/stop toggle + confirm-to-run log ----
 (function initVoice() {
   const btn = document.getElementById("voice-btn");
   const log = document.getElementById("voice-log");
+  const micSel = document.getElementById("voice-mic");
   if (!btn || !log) return;
-  let state = "idle";  // idle | recording | processing
+  let state = "idle";           // idle | recording | processing
+  let recMode = "desktop";      // captured at Start so a mid-recording switch can't confuse Stop
+  let recorder = null, chunks = [], micStreamV = null;
   const base = "w-full rounded-xl py-8 text-2xl font-semibold ";
+  const esc = (x) => String(x).replace(/</g, "&lt;");
+
   function set(s) {
     state = s;
     btn.disabled = s === "processing";
@@ -538,30 +543,81 @@ async function loadModes() {
       : s === "recording" ? "bg-red-700 animate-pulse" : "bg-zinc-700 opacity-70");
     btn.textContent = s === "idle" ? "🎙 Start" : s === "recording" ? "⏹ Stop" : "… processing";
   }
-  function render(t) {
-    if (!t) return;
-    const esc = (x) => String(x).replace(/</g, "&lt;");
+
+  // body of a trace card at a given status: "pending" | "done" | "fail" | "" (info)
+  function cardHTML(t, status) {
     const heard = t.heard ? `"${esc(t.heard)}"` : "(nothing heard)";
-    const verb = t.verb
-      ? `<span class="text-emerald-400 font-medium">${esc(t.verb)}</span>`
-      : `<span class="text-zinc-500">no verb</span>`;
-    const matched = t.matched ? ` <span class="text-zinc-400">→ ${esc(t.matched)}</span>` : "";
-    const detail = esc(t.result || t.note || "");
-    const div = document.createElement("div");
-    div.className = "bg-zinc-900 rounded-lg px-3 py-2";
-    div.innerHTML = `<div class="text-sm text-zinc-200 truncate">${heard}</div>
-      <div class="text-xs mt-0.5">${verb}${matched} · <span class="text-zinc-400">${detail}</span></div>`;
-    log.prepend(div);
+    const verb = t.verb ? `<span class="text-emerald-400 font-medium">${esc(t.verb)}</span>`
+                        : `<span class="text-zinc-500">no verb</span>`;
+    const detail = `<span class="text-zinc-400">${esc(t.preview || t.note || "")}</span>`;
+    let tail = "";
+    if (status === "pending") tail = ` · <span class="text-emerald-400">tap to run ▶</span>`;
+    else if (status === "done") tail = ` · <span class="text-emerald-400">✓ ${esc(t._result || "")}</span>`;
+    else if (status === "fail") tail = ` · <span class="text-red-400">✗ ${esc(t._result || "failed")}</span>`;
+    return `<div class="text-sm text-zinc-200 truncate">${heard}</div>
+      <div class="text-xs mt-0.5">${verb} · ${detail}${tail}</div>`;
+  }
+
+  function render(t) {
+    if (!t) { set("idle"); return; }
+    const pending = !!t.plan;
+    const card = document.createElement("div");
+    card.className = "bg-zinc-900 rounded-lg px-3 py-2" + (pending ? " ring-1 ring-emerald-600/50 cursor-pointer" : "");
+    card.innerHTML = cardHTML(t, pending ? "pending" : "");
+    if (pending) {
+      card.onclick = async () => {
+        if (card.dataset.done) return;
+        if (t.plan.confirm && !confirm(`Run "${t.plan.label}"?`)) return;   // extra gate for confirm-flagged
+        card.dataset.done = "1";
+        card.classList.remove("ring-1", "ring-emerald-600/50", "cursor-pointer");
+        const r = await post("/voice/execute", { plan: t.plan });
+        t._result = (r && r.result) || (r && r.ok ? "ok" : "failed");
+        card.innerHTML = cardHTML(t, r && r.ok ? "done" : "fail");
+      };
+    }
+    log.prepend(card);
     while (log.children.length > 20) log.removeChild(log.lastChild);
   }
+
+  async function startDevice() {
+    micStreamV = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true } });
+    chunks = [];
+    recorder = new MediaRecorder(micStreamV);
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.start();
+  }
+  function stopDevice() {
+    return new Promise((resolve) => {
+      recorder.onstop = async () => {
+        micStreamV.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        const fd = new FormData();
+        fd.append("file", blob, "voice.webm");
+        const res = await fetch("/voice/transcribe", { method: "POST", body: fd });
+        if (res.status === 401) { location.href = "/login"; return resolve(null); }
+        resolve(await res.json().catch(() => null));
+      };
+      recorder.stop();
+    });
+  }
+
   btn.onclick = async () => {
     if (state === "idle") {
-      const r = await post("/voice/start");
-      if (r && r.ok) set("recording");
-      else render({ heard: "", verb: null, note: (r && r.error) || "mic unavailable" });
+      recMode = micSel && micSel.value === "device" ? "device" : "desktop";
+      try {
+        if (recMode === "device") { await startDevice(); set("recording"); }
+        else {
+          const r = await post("/voice/start");
+          if (r && r.ok) set("recording");
+          else render({ heard: "", verb: null, note: (r && r.error) || "mic unavailable", plan: null });
+        }
+      } catch (e) {
+        render({ heard: "", verb: null, note: "mic permission denied", plan: null });
+      }
     } else if (state === "recording") {
       set("processing");
-      render(await post("/voice/stop"));
+      render(recMode === "device" ? await stopDevice() : await post("/voice/stop"));
       set("idle");
     }
   };

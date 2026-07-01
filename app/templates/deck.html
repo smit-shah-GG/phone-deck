@@ -111,10 +111,17 @@
 
     <!-- Voice router -->
     <section data-page="voice" class="hidden flex flex-col gap-3 max-w-2xl mx-auto w-full">
+      <div class="flex items-center justify-center gap-2 text-sm">
+        <span class="text-zinc-500">Mic:</span>
+        <select id="voice-mic" class="sel bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-1 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
+          <option value="desktop">Desktop (rig)</option>
+          <option value="device">Device (phone)</option>
+        </select>
+      </div>
       <button id="voice-btn" class="w-full rounded-xl py-8 text-2xl font-semibold bg-emerald-700">🎙 Start</button>
       <p class="text-xs text-zinc-500 text-center">
         Lane word first — <b class="text-zinc-300">macro</b> work · <b class="text-zinc-300">type</b> hello world ·
-        <b class="text-zinc-300">input</b> copy · <span class="text-zinc-600">jarvis (Tier 2)</span>
+        <b class="text-zinc-300">input</b> copy · <span class="text-zinc-600">jarvis (Tier 2)</span>. Tap a result to run it.
       </p>
       <div id="voice-log" class="space-y-2 overflow-auto"></div>
     </section>

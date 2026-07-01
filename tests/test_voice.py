@@ -1,5 +1,7 @@
 """Voice router — the routing contract (pure functions, no capture/dispatch)."""
 
+import asyncio
+
 from app import voice
 
 
@@ -33,3 +35,13 @@ def test_macro_match_and_confirm_flag():
     assert voice.match_macro("work", ns)["id"] == "work"
     assert voice.match_macro("redeploy site", ns)["confirm"] is True
     assert voice.match_macro("absolutely unrelated phrase", ns) is None
+
+
+def test_plan_produces_executable_descriptor_without_dispatch():
+    # plan() computes what WOULD run but never dispatches (the confirm-before-execute split).
+    p = asyncio.run(voice.plan("type hello world"))
+    assert p["plan"] == {"lane": "type", "text": "hello world"}
+    p = asyncio.run(voice.plan("input copy"))
+    assert p["plan"]["lane"] == "input" and p["plan"]["keys"] == ["ctrl", "c"]
+    p = asyncio.run(voice.plan("gibberish nothing here"))
+    assert p["plan"] is None
