@@ -630,14 +630,11 @@ async function loadModes() {
 function renderStatus(s) {
   const g = s.telemetry?.gpu, c = s.telemetry?.cpu, a = s.audio;
   if (g) document.getElementById("st-gpu").textContent =
-    `GPU ${g.util|0}% · ${(g.vram_used/1024).toFixed(1)}/${(g.vram_total/1024).toFixed(0)}G · ${g.temp|0}° · ${g.power|0}W`;
+    `GPU ${g.util|0}% · ${(g.vram_used/1024).toFixed(1)}/${(g.vram_total/1024).toFixed(0)}G · ${g.temp|0}°`;
   if (c) document.getElementById("st-cpu").textContent =
     `CPU ${c.util|0}%${c.temp ? " · " + (c.temp|0) + "°" : ""} · ${c.mem_used}/${c.mem_total}G`;
   if (a) document.getElementById("st-aud").textContent =
     `${a.mic_muted ? "MIC×" : "MIC"} · ${a.sink_muted ? "MUTE" : (a.volume ?? "—") + "%"}`;
-  const mons = s.hypr?.monitors || [];
-  const foc = mons.find((m) => m.focused);
-  document.getElementById("st-ws").textContent = foc ? `${foc.name} · ws ${foc.active_ws}` : "";
 }
 
 function renderWorkspaces(s) {

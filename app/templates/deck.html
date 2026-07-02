@@ -30,17 +30,23 @@
 </head>
 <body class="bg-black text-zinc-100 h-screen overflow-hidden select-none">
   <!-- persistent status strip -->
-  <header class="flex items-center gap-4 px-4 h-12 bg-zinc-950 border-b border-zinc-800 text-sm">
-    <span class="font-bold tracking-widest text-emerald-500">LIGHTNING</span>
-    <span id="st-gpu" class="text-zinc-400">GPU —</span>
-    <span id="st-cpu" class="text-zinc-400">CPU —</span>
-    <span id="st-aud" class="text-zinc-400">♪ —</span>
-    <span id="st-ws"  class="text-zinc-400 ml-auto">—</span>
-    <span id="st-conn" class="w-2 h-2 rounded-full bg-zinc-600" title="link"></span>
-    <span id="st-bat" class="text-zinc-400 tabular-nums hidden" title="phone battery"></span>
-    <span id="st-clock" class="text-zinc-300 tabular-nums">--:--</span>
-    <button id="reload-btn" class="text-zinc-500 px-1 text-base" title="reload">⟳</button>
-    <button id="fs-btn" class="text-zinc-500 px-1 text-base" title="fullscreen">⛶</button>
+  <header class="flex items-center gap-2 px-3 h-12 bg-zinc-950 border-b border-zinc-800 text-sm">
+    <!-- wordmark = fixed left anchor -->
+    <span class="font-bold tracking-widest text-emerald-500 shrink-0">LIGHTNING</span>
+    <!-- swipeable telemetry: flex-1 + min-w-0 lets it shrink so the action cluster never gets shoved off -->
+    <div id="st-telemetry" class="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto whitespace-nowrap">
+      <span id="st-gpu" class="text-zinc-400">GPU —</span>
+      <span id="st-cpu" class="text-zinc-400">CPU —</span>
+      <span id="st-aud" class="text-zinc-400">MIC —</span>
+    </div>
+    <!-- pinned action cluster: shrink-0 keeps it fixed on the right, always reachable -->
+    <div class="flex items-center gap-2 shrink-0 pl-2 border-l border-zinc-800">
+      <span id="st-conn" class="w-2 h-2 rounded-full bg-zinc-600" title="link"></span>
+      <span id="st-bat" class="text-zinc-400 tabular-nums hidden" title="phone battery"></span>
+      <span id="st-clock" class="text-zinc-300 tabular-nums">--:--</span>
+      <button id="reload-btn" class="text-zinc-500 px-1 text-base" title="reload">⟳</button>
+      <button id="fs-btn" class="text-zinc-500 px-1 text-base" title="fullscreen">⛶</button>
+    </div>
   </header>
 
   <!-- context strip (surface-only: call · media · focused-app controls; persists even when empty) -->

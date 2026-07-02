@@ -306,10 +306,16 @@ nav { border-bottom:1px solid var(--p-outline); }
   background:var(--p-low)!important; color:var(--p-on-var)!important; padding:14px!important; }
 
 /* ════ V2.1: top-row boxed readouts (groups delimited by hairline frames) ════ */
-#st-gpu, #st-cpu, #st-aud, #st-ws, #st-bat, #st-clock {
+#st-gpu, #st-cpu, #st-aud, #st-bat, #st-clock {
   border:1px solid color-mix(in srgb, var(--p-primary) 22%, transparent)!important;
   background:color-mix(in srgb, var(--p-primary) 4%, transparent);
   border-radius:4px; padding:1px 7px; white-space:nowrap; }
+
+/* top-bar telemetry = swipeable strip; hide the scrollbar, fade the right edge as a "more →" hint */
+#st-telemetry { scrollbar-width:none; -ms-overflow-style:none;
+  -webkit-mask-image:linear-gradient(to right, #000 90%, transparent);
+  mask-image:linear-gradient(to right, #000 90%, transparent); }
+#st-telemetry::-webkit-scrollbar { display:none; }
 """
 
 
