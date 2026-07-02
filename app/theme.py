@@ -316,6 +316,31 @@ nav { border-bottom:1px solid var(--p-outline); }
   -webkit-mask-image:linear-gradient(to right, #000 90%, transparent);
   mask-image:linear-gradient(to right, #000 90%, transparent); }
 #st-telemetry::-webkit-scrollbar { display:none; }
+
+/* ════ segmented terminal toggles — replace native <select> (no android popup) ════ */
+.seg { display:flex; flex-wrap:wrap; gap:6px; }
+.seg .segbtn {
+  flex:1 1 auto; min-width:0; padding:7px 12px; cursor:pointer;
+  font:inherit; letter-spacing:.03em; white-space:nowrap; text-align:center;
+  color:var(--p-on-var); background:var(--p-low);
+  border:1px solid var(--p-outline); border-radius:6px;
+  transition:background .12s ease, color .12s ease, border-color .12s ease, box-shadow .12s ease; }
+.seg .segbtn:hover { border-color:var(--p-primary); color:var(--p-on); }
+.seg .segbtn.on {
+  color:var(--p-on-primary)!important; background:var(--p-primary); border-color:var(--p-primary);
+  text-shadow:none!important;
+  box-shadow:0 0 10px var(--p-primary), inset 0 0 12px color-mix(in srgb, #000 22%, transparent); }
+
+/* native <select> fallback skin — safety net for any select not converted to .seg */
+.sel { -webkit-appearance:none; appearance:none;
+  background-color:var(--p-low)!important; color:var(--p-on)!important;
+  border:1px solid var(--p-outline)!important; border-radius:6px;
+  padding:8px 30px 8px 12px!important; font:inherit;
+  background-image:linear-gradient(45deg, transparent 50%, var(--p-primary) 50%),
+                   linear-gradient(135deg, var(--p-primary) 50%, transparent 50%);
+  background-position:calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
+.sel option { background:var(--p-surface); color:var(--p-on); }
 """
 
 

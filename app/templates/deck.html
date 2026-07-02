@@ -126,10 +126,10 @@
     <section data-page="voice" class="hidden grid grid-cols-[280px_1fr] gap-3 h-[calc(100vh-11rem)]">
       <div class="bg-zinc-900 rounded-lg p-4 space-y-3">
         <p class="text-xs uppercase tracking-wider text-zinc-500">Microphone</p>
-        <select id="voice-mic" class="sel w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
-          <option value="desktop">Desktop (rig)</option>
-          <option value="device">Device (phone)</option>
-        </select>
+        <div id="voice-mic" class="seg" data-value="desktop">
+          <button type="button" class="segbtn on" data-val="desktop">Desktop (rig)</button>
+          <button type="button" class="segbtn" data-val="device">Device (phone)</button>
+        </div>
         <button id="voice-btn" class="w-full rounded-xl py-8 text-2xl font-semibold bg-emerald-700">▶ START</button>
         <p class="text-xs text-zinc-500">Lane word first — <b class="text-zinc-300">macro</b> · <b class="text-zinc-300">type</b> · <b class="text-zinc-300">input</b> · <b class="text-zinc-300">friday</b>. Tap a result to run.</p>
       </div>
@@ -178,14 +178,14 @@
     <section data-page="system" class="hidden grid grid-cols-2 gap-4">
       <div class="space-y-3">
         <div id="ts-status" class="bg-zinc-900 rounded-lg p-3 text-sm text-zinc-400">Tailscale —</div>
-        <div class="bg-zinc-900 rounded-lg p-3 flex items-center gap-2 text-sm">
+        <div class="bg-zinc-900 rounded-lg p-3 space-y-2 text-sm">
           <span class="text-zinc-400">Theme</span>
-          <select id="theme-profile" class="sel flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
-            <option value="green">Green · P1</option>
-            <option value="amber">Amber · P3</option>
-            <option value="ice">Ice</option>
-            <option value="auto">Auto · wallpaper</option>
-          </select>
+          <div id="theme-profile" class="seg">
+            <button type="button" class="segbtn" data-val="green">Green</button>
+            <button type="button" class="segbtn" data-val="amber">Amber</button>
+            <button type="button" class="segbtn" data-val="ice">Ice</button>
+            <button type="button" class="segbtn" data-val="auto">Auto</button>
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <button class="act col-span-2 bg-emerald-700 rounded-lg py-3 font-medium" data-action="perfmode">» PERF MODE</button>
@@ -215,13 +215,11 @@
         <div class="flex items-center justify-between text-sm border-b border-zinc-800 pb-2"><span class="text-zinc-400">Phone mic → PC</span><button id="stream-mic" class="tgl"></button></div>
         <div class="flex items-center justify-between text-sm border-b border-zinc-800 pb-2"><span class="text-zinc-400">Phone-only output</span><button id="stream-phoneonly" class="tgl"></button></div>
         <div class="flex items-center justify-between text-sm"><span class="text-zinc-400">Video (screen)</span><button id="stream-video" class="tgl"></button></div>
-        <div class="flex gap-2">
-          <select id="stream-monitor" class="sel flex-1 min-w-0 truncate bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600"></select>
-          <select id="stream-quality" class="sel shrink-0 w-24 bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
-            <option value="low">540p</option>
-            <option value="medium" selected>720p</option>
-            <option value="high">1080p</option>
-          </select>
+        <div id="stream-monitor" class="seg"></div>
+        <div id="stream-quality" class="seg" data-value="medium">
+          <button type="button" class="segbtn" data-val="low">540p</button>
+          <button type="button" class="segbtn on" data-val="medium">720p</button>
+          <button type="button" class="segbtn" data-val="high">1080p</button>
         </div>
         <div class="flex gap-2">
           <button id="stream-connect" class="flex-1 bg-emerald-600 rounded-lg py-3 font-medium">Connect</button>
@@ -242,10 +240,8 @@
     <section data-page="files" class="hidden grid grid-cols-2 gap-4 items-start">
       <div class="bg-zinc-900 rounded-lg p-4 space-y-3">
         <p class="text-xs uppercase tracking-wider text-zinc-500">Screenshot</p>
-        <div class="flex gap-2">
-          <select id="shot-monitor" class="sel flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600"></select>
-          <button id="shot-grab" class="shrink-0 bg-emerald-600 rounded-lg px-4 py-2 text-sm font-medium">Grab</button>
-        </div>
+        <div id="shot-monitor" class="seg"></div>
+        <button id="shot-grab" class="w-full bg-emerald-600 rounded-lg px-4 py-2 text-sm font-medium">Grab</button>
         <a id="shot-dl" download class="hidden text-emerald-400 text-sm underline">Download PNG</a>
         <div class="shot-area"><span class="text-zinc-600 text-xs">▚ no capture yet ▞</span><img id="shot-img" class="max-w-full rounded-lg hidden" alt=""></div>
       </div>

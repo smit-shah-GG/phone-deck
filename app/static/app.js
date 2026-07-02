@@ -94,19 +94,46 @@ document.querySelectorAll(".tab").forEach((btn) => {
   };
 });
 
+// ---- segmented controls (terminal toggles that replace native <select>) ----
+function segValue(id) {
+  const el = typeof id === "string" ? document.getElementById(id) : id;
+  return el ? el.dataset.value : undefined;
+}
+function segSet(el, val) {
+  if (!el) return;
+  el.dataset.value = val;
+  el.querySelectorAll(".segbtn").forEach((b) => b.classList.toggle("on", b.dataset.val === val));
+}
+function segInit(el, onChange) {
+  if (!el || el._segInit) return;      // delegated listener survives innerHTML rebuilds; init once
+  el._segInit = true;
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest(".segbtn");
+    if (!b || !el.contains(b) || b.dataset.val === el.dataset.value) return;
+    segSet(el, b.dataset.val);
+    if (onChange) onChange(b.dataset.val);
+  });
+}
+function segRender(el, items) {         // rebuild options; keep current value if it still exists
+  if (!el) return;
+  const keep = items.some((it) => it.val === el.dataset.value) ? el.dataset.value : (items[0] && items[0].val);
+  el.innerHTML = items.map((it) =>
+    `<button type="button" class="segbtn${it.val === keep ? " on" : ""}" data-val="${it.val}">${it.label}</button>`
+  ).join("");
+  el.dataset.value = keep;
+}
+
 // ---- files: screenshot + drop ----
 function populateShotMonitors() {
-  const sel = document.getElementById("shot-monitor");
   const mons = (lastState.hypr && lastState.hypr.monitors) || [];
-  const cur = sel.value;
-  sel.innerHTML = mons.map((m) => `<option value="${m.name}">${m.name} (${m.model || ""})</option>`).join("");
-  if (cur) sel.value = cur;
+  segRender(document.getElementById("shot-monitor"), mons.map((m) => ({ val: m.name, label: m.name })));
 }
 (function initFiles() {
   const grab = document.getElementById("shot-grab");
   if (!grab) return;
+  segInit(document.getElementById("shot-monitor"));
   grab.onclick = async () => {
-    const mon = document.getElementById("shot-monitor").value;
+    const mon = segValue("shot-monitor");
     grab.classList.add("opacity-50");
     const r = await fetch(`/screenshot?monitor=${encodeURIComponent(mon)}`);
     grab.classList.remove("opacity-50");
@@ -294,11 +321,8 @@ function streamState(text, on) {
   document.getElementById("stream-dot").classList.toggle("bg-zinc-600", !on);
 }
 function populateMonitors() {
-  const sel = document.getElementById("stream-monitor");
   const mons = (lastState.hypr && lastState.hypr.monitors) || [];
-  const cur = sel.value;
-  sel.innerHTML = mons.map((m) => `<option value="${m.name}">${m.name} (${m.model || ""})</option>`).join("");
-  if (cur) sel.value = cur;
+  segRender(document.getElementById("stream-monitor"), mons.map((m) => ({ val: m.name, label: m.name })));
 }
 async function streamStop() {
   if (streamPc) { streamPc.close(); streamPc = null; }
@@ -350,8 +374,8 @@ async function streamConnect() {
     const ans = await post("/audio/webrtc/offer", {
       sdp: pc.localDescription.sdp, type: pc.localDescription.type,
       listen: streamOpts.listen, mic: streamOpts.mic, phoneOnly: streamOpts.phoneOnly,
-      video: streamOpts.video ? document.getElementById("stream-monitor").value : null,
-      videoQuality: document.getElementById("stream-quality").value });
+      video: streamOpts.video ? segValue("stream-monitor") : null,
+      videoQuality: segValue("stream-quality") });
     if (!ans || !ans.sdp) { streamState("offer rejected", false); return; }
     await pc.setRemoteDescription(ans);
   } catch (err) {
@@ -376,11 +400,13 @@ async function streamConnect() {
   toggle("stream-mic", "mic");
   toggle("stream-phoneonly", "phoneOnly");
   toggle("stream-video", "video");
+  segInit(document.getElementById("stream-monitor"));
+  segInit(document.getElementById("stream-quality"));
 
   // touch-on-video -> remote cursor. Pointer events cover touch AND mouse (laptops).
   // tap = left click · drag = move-with-button · long-press = right click.
   const vid = document.getElementById("stream-video-el");
-  const vmon = () => document.getElementById("stream-monitor").value;
+  const vmon = () => segValue("stream-monitor");
   function vfrac(ev) {                       // letterbox-correct fraction within the video content
     if (!vid.videoWidth) return null;
     const r = vid.getBoundingClientRect();
@@ -506,6 +532,7 @@ async function loadModes() {
   const log = document.getElementById("voice-log");
   const micSel = document.getElementById("voice-mic");
   if (!btn || !log) return;
+  segInit(micSel);
   let state = "idle";           // idle | recording | processing
   let recMode = "desktop";      // captured at Start so a mid-recording switch can't confuse Stop
   let recorder = null, chunks = [], micStreamV = null;
@@ -606,7 +633,7 @@ async function loadModes() {
 
   btn.onclick = async () => {
     if (state === "idle") {
-      recMode = micSel && micSel.value === "device" ? "device" : "desktop";
+      recMode = segValue(micSel) === "device" ? "device" : "desktop";
       try {
         if (recMode === "device") { await startDevice(); set("recording"); }
         else {
@@ -842,12 +869,12 @@ window.addEventListener("resize", applyDensity);
 (function initTheme() {
   const sel = document.getElementById("theme-profile");
   if (!sel) return;
-  fetch("/theme").then((r) => r.json()).then((d) => { if (d.profile) sel.value = d.profile; }).catch(() => {});
-  sel.onchange = async () => {
-    await post("/theme", { profile: sel.value });
+  segInit(sel, async (profile) => {
+    await post("/theme", { profile });
     const link = document.querySelector('link[href^="/theme.css"]');
     if (link) link.href = "/theme.css?t=" + Date.now();   // re-fetch the skin in place
-  };
+  });
+  fetch("/theme").then((r) => r.json()).then((d) => { if (d.profile) segSet(sel, d.profile); }).catch(() => {});
 })();
 
 connect();
