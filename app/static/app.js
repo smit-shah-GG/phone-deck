@@ -52,7 +52,7 @@ if (reloadBtn) reloadBtn.onclick = () => location.reload();
   navigator.getBattery().then((bat) => {
     const render = () => {
       const pct = Math.round(bat.level * 100);
-      el.textContent = `${bat.charging ? "⚡" : "🔋"}${pct}%`;
+      el.textContent = `${bat.charging ? "PWR " : "BAT "}${pct}%`;
       el.classList.toggle("text-red-400", !bat.charging && pct <= 15);
       el.classList.remove("hidden");
     };
@@ -364,20 +364,18 @@ async function streamConnect() {
   if (!c) return;
   c.onclick = streamConnect;
   document.getElementById("stream-stop").onclick = streamStop;
-  const toggle = (id, key, label) => {
+  const toggle = (id, key) => {
     const b = document.getElementById(id);
+    b.classList.toggle("on", !!streamOpts[key]);          // reflect initial state
     b.onclick = () => {
       streamOpts[key] = !streamOpts[key];
-      b.textContent = `${label}: ${streamOpts[key] ? "ON" : "OFF"}`;
-      b.classList.toggle("bg-emerald-700", streamOpts[key]);
-      b.classList.toggle("bg-zinc-800", !streamOpts[key]);
-      b.classList.toggle("text-zinc-400", !streamOpts[key]);
+      b.classList.toggle("on", streamOpts[key]);
     };
   };
-  toggle("stream-listen", "listen", "Listen to PC");
-  toggle("stream-mic", "mic", "Phone mic → PC");
-  toggle("stream-phoneonly", "phoneOnly", "Phone-only output");
-  toggle("stream-video", "video", "Video (screen)");
+  toggle("stream-listen", "listen");
+  toggle("stream-mic", "mic");
+  toggle("stream-phoneonly", "phoneOnly");
+  toggle("stream-video", "video");
 
   // touch-on-video -> remote cursor. Pointer events cover touch AND mouse (laptops).
   // tap = left click · drag = move-with-button · long-press = right click.
@@ -436,7 +434,7 @@ async function streamConnect() {
   };
   document.addEventListener("pointerlockchange", () => {
     videoCaptured = document.pointerLockElement === vid;
-    btn.textContent = videoCaptured ? "🔓 Locked — Esc to release" : "🔒 Lock input → rig (mouse + keys)";
+    btn.textContent = videoCaptured ? "LOCKED — Esc to release" : "LOCK input → rig (mouse + keys)";
     btn.classList.toggle("bg-emerald-700", videoCaptured);
     btn.classList.toggle("text-zinc-400", !videoCaptured);
     btn.classList.toggle("bg-zinc-800", !videoCaptured);
@@ -519,7 +517,7 @@ async function loadModes() {
     btn.disabled = s === "processing";
     btn.className = base + (s === "idle" ? "bg-emerald-700"
       : s === "recording" ? "bg-red-700 animate-pulse" : "bg-zinc-700 opacity-70");
-    btn.textContent = s === "idle" ? "🎙 Start" : s === "recording" ? "⏹ Stop" : "… processing";
+    btn.textContent = s === "idle" ? "▶ START" : s === "recording" ? "■ STOP" : "··· WORKING";
   }
 
   // body of a trace card at a given status: "pending" | "done" | "fail" | "" (info)
@@ -536,16 +534,24 @@ async function loadModes() {
       <div class="text-xs mt-0.5">${verb} · ${detail}${tail}</div>`;
   }
 
-  // jarvis answers get their own layout: full multi-line text + cited source links
+  // jarvis answers get their own layout: full multi-line text + cited source links,
+  // typed in phosphor-terminal style with a blinking cursor.
   function renderJarvis(card, t, r) {
-    const ans = esc((r && r.result) || "no answer");
+    const answer = (r && r.result) || "no answer";
+    const ok = r && r.ok;
     let src = "";
     if (r && r.sources && r.sources.length) {
-      src = '<div class="mt-2 space-y-0.5 border-t border-zinc-800 pt-1">' + r.sources.map((s, i) =>
-        `<a href="${esc(s.url)}" target="_blank" rel="noopener" class="block text-xs text-emerald-400 truncate">[${i + 1}] ${esc(s.title)}</a>`).join("") + "</div>";
+      src = '<div class="flex gap-2 flex-wrap mt-2 border-t border-zinc-800 pt-1">' + r.sources.map((s, i) =>
+        `<a href="${esc(s.url)}" target="_blank" rel="noopener" class="text-xs truncate">[${i + 1}] ${esc(s.title)}</a>`).join("") + "</div>";
     }
-    card.innerHTML = `<div class="text-xs text-zinc-500 truncate">"${esc(t.heard)}"</div>
-      <div class="text-sm ${(r && r.ok) ? "text-zinc-100" : "text-amber-400"} mt-1 whitespace-pre-wrap">${ans}</div>${src}`;
+    card.innerHTML = `<div class="jv-friday">FRIDAY</div><div class="text-xs text-zinc-500 truncate">"${esc(t.heard)}"</div>
+      <div class="text-sm ${ok ? "text-zinc-100" : "text-amber-400"} mt-1 whitespace-pre-wrap"><span class="jv-type"></span><span class="jv-cursor">▋</span></div>${src}`;
+    const span = card.querySelector(".jv-type"), cursor = card.querySelector(".jv-cursor");
+    let i = 0;
+    (function tick() {
+      if (i <= answer.length) { span.textContent = answer.slice(0, i++); setTimeout(tick, 11); }
+      else if (cursor) cursor.remove();
+    })();
   }
 
   function render(t) {
@@ -628,7 +634,7 @@ function renderStatus(s) {
   if (c) document.getElementById("st-cpu").textContent =
     `CPU ${c.util|0}%${c.temp ? " · " + (c.temp|0) + "°" : ""} · ${c.mem_used}/${c.mem_total}G`;
   if (a) document.getElementById("st-aud").textContent =
-    `${a.mic_muted ? "🔇mic" : "🎙"} ${a.sink_muted ? "🔇" : (a.volume ?? "—") + "%"}`;
+    `${a.mic_muted ? "MIC×" : "MIC"} · ${a.sink_muted ? "MUTE" : (a.volume ?? "—") + "%"}`;
   const mons = s.hypr?.monitors || [];
   const foc = mons.find((m) => m.focused);
   document.getElementById("st-ws").textContent = foc ? `${foc.name} · ws ${foc.active_ws}` : "";
@@ -650,7 +656,7 @@ function renderWorkspaces(s) {
       <div class="mt-2 flex items-center gap-2">
         <button class="dpms text-xs px-2 py-1 rounded ${m.dpms ? "bg-zinc-800" : "bg-red-800"}"
           data-mon="${m.name}" data-on="${m.dpms ? 1 : 0}" title="DPMS">${m.dpms ? "⏻ on" : "off"}</button>
-        <span class="text-xs text-zinc-600">☀</span>
+        <span class="text-xs text-emerald-500">BRT</span>
         <input type="range" min="0" max="100" value="${brightness[m.name] ?? 50}"
           class="bri flex-1" data-mon="${m.name}" ${m.name in brightness ? "" : "disabled"}>
       </div>
@@ -689,7 +695,7 @@ function renderAudio(s) {
   document.getElementById("spk-btn").classList.toggle("bg-red-800", a.sink_muted);
   const np = a.now_playing;
   document.getElementById("now-playing").textContent =
-    np && np.title ? `${np.status === "Playing" ? "▶" : "⏸"} ${np.title}` : "—";
+    np && np.title ? `${np.status === "Playing" ? "▶" : "‖"} ${np.title}` : "—";
   const art = document.getElementById("art");
   if (np && np.art_key) {
     if (art.dataset.k !== np.art_key) {       // only refetch when the track changes
@@ -704,13 +710,11 @@ function renderAudio(s) {
     art.dataset.k = "";
   }
   document.getElementById("sink-list").innerHTML = (a.sinks || []).map((d) =>
-    `<button class="sink w-full text-left text-sm rounded-lg px-3 py-2 truncate
-      ${d.active ? "bg-emerald-700" : "bg-zinc-800"}" data-id="${d.id}">${d.name}</button>`).join("");
+    `<div class="sink dev w-full truncate cursor-pointer text-sm ${d.active ? "on" : ""}" data-id="${d.id}"><span class="dot"></span>${d.name}</div>`).join("");
   document.querySelectorAll(".sink").forEach((b) =>
     (b.onclick = () => post("/audio/sink", { id: Number(b.dataset.id) })));
   document.getElementById("source-list").innerHTML = (a.sources || []).map((d) =>
-    `<button class="source w-full text-left text-sm rounded-lg px-3 py-2 truncate
-      ${d.active ? "bg-emerald-700" : "bg-zinc-800"}" data-id="${d.id}">${d.name}</button>`).join("");
+    `<div class="source dev w-full truncate cursor-pointer text-sm ${d.active ? "on" : ""}" data-id="${d.id}"><span class="dot"></span>${d.name}</div>`).join("");
   document.querySelectorAll(".source").forEach((b) =>
     (b.onclick = () => post("/audio/source", { id: Number(b.dataset.id) })));
 }
@@ -721,10 +725,11 @@ function renderSystem(s) {
     `Tailscale: ${ts.up ? "up" : "down"} · ${ts.self} · ${ts.online}/${ts.total} peers online`;
   const procs = s.sysinfo?.procs || [];
   document.getElementById("proc-list").innerHTML = procs.map((p) =>
-    `<div class="flex items-center gap-2 bg-zinc-900 rounded px-2 py-1">
-      <span class="flex-1 truncate">${p.name}</span>
-      <span class="text-zinc-500 tabular-nums">${p.mem}%</span>
-      <button class="kill text-red-400 px-2" data-pid="${p.pid}" ${p.mine ? "" : "disabled"}>✕</button>
+    `<div class="proc">
+      <span class="pn">${p.name}</span>
+      <span class="pbar"><span class="pfill" style="width:${Math.min(100, Number(p.mem) || 0)}%"></span></span>
+      <span class="pv">${p.mem}%</span>
+      <button class="kill px-1" data-pid="${p.pid}" ${p.mine ? "" : "disabled"}>✕</button>
     </div>`).join("");
   document.querySelectorAll(".kill").forEach((b) =>
     (b.onclick = () => b.disabled || post("/sys/kill", { pid: Number(b.dataset.pid) })));
@@ -769,8 +774,8 @@ function renderContext(s) {
   const rec = (s.audio?.recording || []).filter((r) => calls.some((a) => ctxLoose(r, a)));
   if (rec.length) {
     const g = ctxGroup(first); first = false;
-    g.appendChild(ctxLabel("📞", "text-emerald-400"));
-    g.appendChild(ctxBtn(s.audio?.mic_muted ? "🔇 mic" : "🎙 mute",
+    g.appendChild(ctxLabel("CALL", "text-emerald-400"));
+    g.appendChild(ctxBtn(s.audio?.mic_muted ? "UNMUTE" : "MUTE",
       () => post("/audio/mute", { target: "mic" }),
       s.audio?.mic_muted ? "bg-red-800" : "bg-zinc-800"));
     const callWin = wins.find((w) => rec.some((r) => w.cls && ctxLoose(w.cls, r)));
@@ -782,12 +787,12 @@ function renderContext(s) {
   const np = s.audio?.now_playing;
   if (np && np.title) {
     const g = ctxGroup(first); first = false;
-    const t = ctxLabel((np.status === "Playing" ? "▶ " : "⏸ ") + np.title, "text-zinc-400");
+    const t = ctxLabel((np.status === "Playing" ? "▶ " : "‖ ") + np.title, "text-zinc-400");
     t.classList.add("max-w-[10rem]", "truncate");
     g.appendChild(t);
-    g.appendChild(ctxBtn("⏮", () => post("/media/previous")));
-    g.appendChild(ctxBtn("⏯", () => post("/media/play-pause")));
-    g.appendChild(ctxBtn("⏭", () => post("/media/next")));
+    g.appendChild(ctxBtn("|◀", () => post("/media/previous")));
+    g.appendChild(ctxBtn("▶", () => post("/media/play-pause")));
+    g.appendChild(ctxBtn("▶|", () => post("/media/next")));
     strip.appendChild(g);
   }
 
@@ -835,6 +840,18 @@ function applyDensity() {
 }
 applyDensity();
 window.addEventListener("resize", applyDensity);
+
+// ---- theme profile selector (System) — live hot-swap, no reload ----
+(function initTheme() {
+  const sel = document.getElementById("theme-profile");
+  if (!sel) return;
+  fetch("/theme").then((r) => r.json()).then((d) => { if (d.profile) sel.value = d.profile; }).catch(() => {});
+  sel.onchange = async () => {
+    await post("/theme", { profile: sel.value });
+    const link = document.querySelector('link[href^="/theme.css"]');
+    if (link) link.href = "/theme.css?t=" + Date.now();   // re-fetch the skin in place
+  };
+})();
 
 connect();
 connectInput();

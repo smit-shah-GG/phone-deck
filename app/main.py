@@ -116,6 +116,16 @@ async def theme_css():
     return Response(theme.css(), media_type="text/css", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/theme")
+async def theme_get(_=Depends(auth.require_auth)):
+    return JSONResponse({"profile": theme._profile()})
+
+
+@app.post("/theme")
+async def theme_set(payload: dict, _=Depends(auth.require_auth)):
+    return JSONResponse(theme.set_profile(payload.get("profile", "green")))
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     return templates.TemplateResponse(request, "login.html")

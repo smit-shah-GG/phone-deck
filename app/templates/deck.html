@@ -11,6 +11,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/theme.css">
   <style>
     .sel {
@@ -64,6 +67,7 @@
     <section data-page="remote" class="hidden grid grid-cols-2 gap-3 h-[calc(100vh-11rem)]">
       <!-- mouse -->
       <div class="flex flex-col gap-2">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Trackpad</p>
         <div id="trackpad" class="flex-1 bg-zinc-900 rounded-xl flex items-center justify-center text-center text-zinc-600 text-xs px-4 touch-none">
           Trackpad — drag to move · tap = click · two-finger tap = right · two-finger drag = scroll
         </div>
@@ -75,6 +79,7 @@
       </div>
       <!-- keyboard -->
       <div class="flex flex-col gap-2">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Keyboard</p>
         <div class="flex gap-2 items-center">
           <input id="kbd" placeholder="type here…" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
             class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-600">
@@ -103,26 +108,29 @@
     </section>
 
     <!-- Modes / scenes -->
-    <section data-page="modes" class="hidden space-y-3">
-      <div id="mode-grid" class="grid grid-cols-3 gap-3"></div>
-      <pre id="mode-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-400 whitespace-pre-wrap overflow-auto max-h-64"></pre>
+    <section data-page="modes" class="hidden">
+      <div class="bg-zinc-900 rounded-lg p-4 space-y-3 max-w-3xl">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Layout Modes</p>
+        <div id="mode-grid" class="grid grid-cols-2 gap-4"></div>
+        <pre id="mode-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs whitespace-pre-wrap overflow-auto max-h-64"></pre>
+      </div>
     </section>
 
     <!-- Voice router -->
-    <section data-page="voice" class="hidden flex flex-col gap-3 max-w-2xl mx-auto w-full">
-      <div class="flex items-center justify-center gap-2 text-sm">
-        <span class="text-zinc-500">Mic:</span>
-        <select id="voice-mic" class="sel bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-1 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
+    <section data-page="voice" class="hidden grid grid-cols-[280px_1fr] gap-3 h-[calc(100vh-11rem)]">
+      <div class="bg-zinc-900 rounded-lg p-4 space-y-3">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Microphone</p>
+        <select id="voice-mic" class="sel w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
           <option value="desktop">Desktop (rig)</option>
           <option value="device">Device (phone)</option>
         </select>
+        <button id="voice-btn" class="w-full rounded-xl py-8 text-2xl font-semibold bg-emerald-700">▶ START</button>
+        <p class="text-xs text-zinc-500">Lane word first — <b class="text-zinc-300">macro</b> · <b class="text-zinc-300">type</b> · <b class="text-zinc-300">input</b> · <b class="text-zinc-300">friday</b>. Tap a result to run.</p>
       </div>
-      <button id="voice-btn" class="w-full rounded-xl py-8 text-2xl font-semibold bg-emerald-700">🎙 Start</button>
-      <p class="text-xs text-zinc-500 text-center">
-        Lane word first — <b class="text-zinc-300">macro</b> work · <b class="text-zinc-300">type</b> hello world ·
-        <b class="text-zinc-300">input</b> copy · <b class="text-zinc-300">friday</b> what's my gpu temp. Tap a result to run it.
-      </p>
-      <div id="voice-log" class="space-y-2 overflow-auto"></div>
+      <div class="bg-zinc-900 rounded-lg p-4 flex flex-col min-h-0">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Trace · Answers</p>
+        <div id="voice-log" class="space-y-2 mt-2 overflow-auto"></div>
+      </div>
     </section>
 
     <!-- Audio / Media -->
@@ -142,9 +150,9 @@
             <p id="now-playing" class="text-sm text-zinc-300 truncate flex-1">—</p>
           </div>
           <div class="flex gap-2">
-            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-xl" data-media="previous">⏮</button>
-            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-xl" data-media="play-pause">⏯</button>
-            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-xl" data-media="next">⏭</button>
+            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-lg text-emerald-500" data-media="previous">|◀</button>
+            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-lg text-emerald-500" data-media="play-pause">▶</button>
+            <button class="media flex-1 bg-zinc-800 rounded-lg py-4 text-lg text-emerald-500" data-media="next">▶|</button>
           </div>
         </div>
       </div>
@@ -164,8 +172,17 @@
     <section data-page="system" class="hidden grid grid-cols-2 gap-4">
       <div class="space-y-3">
         <div id="ts-status" class="bg-zinc-900 rounded-lg p-3 text-sm text-zinc-400">Tailscale —</div>
+        <div class="bg-zinc-900 rounded-lg p-3 flex items-center gap-2 text-sm">
+          <span class="text-zinc-400">Theme</span>
+          <select id="theme-profile" class="sel flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
+            <option value="green">Green · P1</option>
+            <option value="amber">Amber · P3</option>
+            <option value="ice">Ice</option>
+            <option value="auto">Auto · wallpaper</option>
+          </select>
+        </div>
         <div class="grid grid-cols-2 gap-2">
-          <button class="act col-span-2 bg-emerald-700 rounded-lg py-3 font-medium" data-action="perfmode">🚀 Perf Mode</button>
+          <button class="act col-span-2 bg-emerald-700 rounded-lg py-3 font-medium" data-action="perfmode">» PERF MODE</button>
           <button class="sys bg-zinc-800 rounded-lg py-3" data-sys="lock">Lock</button>
           <button class="act bg-zinc-800 rounded-lg py-3" data-action="nm_restart" data-confirm="Restart NetworkManager?">Restart NM</button>
           <button class="act bg-amber-900/70 rounded-lg py-3" data-action="suspend" data-confirm="Suspend the host?">Suspend</button>
@@ -181,16 +198,17 @@
     </section>
 
     <!-- Audio streaming (bidirectional) -->
-    <section data-page="stream" class="hidden flex gap-3 items-start h-[calc(100vh-11rem)]">
-      <div class="bg-zinc-900 rounded-lg p-4 space-y-3 w-72 shrink-0">
+    <section data-page="stream" class="hidden flex gap-3 items-stretch h-[calc(100vh-11rem)]">
+      <div class="bg-zinc-900 rounded-lg p-4 space-y-3 w-72 shrink-0 overflow-auto">
+        <p class="text-xs uppercase tracking-wider text-zinc-500">Control</p>
         <div class="flex items-center gap-2">
           <span id="stream-dot" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
           <span id="stream-status" class="text-sm text-zinc-400">Idle</span>
         </div>
-        <button id="stream-listen" class="w-full bg-emerald-700 rounded-lg py-2 text-sm">Listen to PC: ON</button>
-        <button id="stream-mic" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">Phone mic → PC: OFF</button>
-        <button id="stream-phoneonly" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">Phone-only output: OFF</button>
-        <button id="stream-video" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">Video (screen): OFF</button>
+        <div class="flex items-center justify-between text-sm border-b border-zinc-800 pb-2"><span class="text-zinc-400">Listen to PC</span><button id="stream-listen" class="tgl on"></button></div>
+        <div class="flex items-center justify-between text-sm border-b border-zinc-800 pb-2"><span class="text-zinc-400">Phone mic → PC</span><button id="stream-mic" class="tgl"></button></div>
+        <div class="flex items-center justify-between text-sm border-b border-zinc-800 pb-2"><span class="text-zinc-400">Phone-only output</span><button id="stream-phoneonly" class="tgl"></button></div>
+        <div class="flex items-center justify-between text-sm"><span class="text-zinc-400">Video (screen)</span><button id="stream-video" class="tgl"></button></div>
         <div class="flex gap-2">
           <select id="stream-monitor" class="sel flex-1 min-w-0 truncate bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600"></select>
           <select id="stream-quality" class="sel shrink-0 w-24 bg-zinc-950 border border-zinc-800 rounded-lg pl-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-emerald-600">
@@ -203,12 +221,15 @@
           <button id="stream-connect" class="flex-1 bg-emerald-600 rounded-lg py-3 font-medium">Connect</button>
           <button id="stream-stop" class="flex-1 bg-zinc-800 rounded-lg py-3">Stop</button>
         </div>
-        <button id="stream-capture" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">🔒 Lock input → rig (mouse + keys)</button>
+        <button id="stream-capture" class="w-full bg-zinc-800 rounded-lg py-2 text-sm text-zinc-400">LOCK input → rig (mouse + keys)</button>
         <p class="text-xs text-zinc-500">Mic shows up on the rig as input <b>“Monitor of PhoneDeckMic”</b> — select it in the app you want to use it in. Headphones recommended to avoid echo. Keep this screen foreground.</p>
         <p class="text-xs text-zinc-600"><b>Lock input</b> (with video on): the cursor is captured and keystrokes go to the rig — a wireless kb+mouse+screen. <b>Esc</b> releases (so Esc can’t be sent while locked; use the on-screen Esc).</p>
       </div>
       <audio id="stream-audio" autoplay playsinline></audio>
-      <video id="stream-video-el" autoplay playsinline muted class="flex-1 min-w-0 max-h-full rounded-lg bg-black object-contain hidden touch-none cursor-crosshair"></video>
+      <div class="flex-1 min-w-0 rounded-lg border border-zinc-800 bg-black relative flex items-center justify-center overflow-hidden">
+        <span class="text-zinc-600 tracking-[.35em] text-sm pointer-events-none">▛ STREAM ▟</span>
+        <video id="stream-video-el" autoplay playsinline muted class="absolute inset-0 w-full h-full object-contain hidden touch-none cursor-crosshair"></video>
+      </div>
     </section>
 
     <!-- Files: screenshot + drop -->
@@ -220,7 +241,7 @@
           <button id="shot-grab" class="shrink-0 bg-emerald-600 rounded-lg px-4 py-2 text-sm font-medium">Grab</button>
         </div>
         <a id="shot-dl" download class="hidden text-emerald-400 text-sm underline">Download PNG</a>
-        <img id="shot-img" class="w-full rounded-lg hidden" alt="">
+        <div class="shot-area"><span class="text-zinc-600 text-xs">▚ no capture yet ▞</span><img id="shot-img" class="max-w-full rounded-lg hidden" alt=""></div>
       </div>
       <div class="bg-zinc-900 rounded-lg p-4 space-y-3">
         <p class="text-xs uppercase tracking-wider text-zinc-500">Send file to PC</p>
