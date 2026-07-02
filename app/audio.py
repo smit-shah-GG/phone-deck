@@ -88,6 +88,48 @@ async def _recording_apps() -> list[str]:
     return sorted(set(apps))
 
 
+# Raw browser MPRIS buses that the KDE plasma-browser-integration extension mirrors.
+# When that integration is on the bus, these raw buses are duplicates that cause the
+# now-playing title to flap — and the raw chromium bus reports CanGoNext=false, so
+# next/previous silently no-op. We defer to the plasma player instead (it exposes the
+# page's MediaSession, so transport works), exactly as the quickshell reference does.
+_BROWSER_PREFIXES = ("chromium", "chrome", "brave", "firefox", "vivaldi", "opera", "edge", "microsoft-edge")
+
+
+async def _players() -> list[tuple[str, str]]:
+    """(player_name, status) for every MPRIS player, in playerctl's stable order."""
+    names = (await _out("playerctl", "-l")).split()
+    if not names:
+        return []
+    statuses = (await _out("playerctl", "-a", "status")).splitlines()
+    statuses += [""] * (len(names) - len(statuses))   # guard a race that trims the list
+    return list(zip(names, (s.strip() for s in statuses)))
+
+
+def _pick_player(players: list[tuple[str, str]]) -> str | None:
+    """Choose the player to read + control, mirroring quickshell's MprisController:
+    drop playerctld, and — when plasma-browser-integration is present — the raw browser
+    buses it duplicates; then prefer a Playing player, then Paused, then the first.
+    """
+    has_plasma = any(n.startswith("plasma-browser-integration") for n, _ in players)
+
+    def keep(n: str) -> bool:
+        if n.startswith("playerctld"):
+            return False                              # playerctld just copies other buses
+        if has_plasma and n.startswith(_BROWSER_PREFIXES):
+            return False                              # mirrored by (and richer via) plasma
+        return True
+
+    cand = [(n, s) for n, s in players if keep(n)] or players
+    if not cand:
+        return None
+    for want in ("Playing", "Paused"):
+        for n, s in cand:
+            if s == want:
+                return n
+    return cand[0][0]
+
+
 async def snapshot() -> dict:
     vol_raw = await _out("pactl", "get-sink-volume", "@DEFAULT_SINK@")
     m = _PCT.search(vol_raw)
@@ -100,9 +142,11 @@ async def snapshot() -> dict:
              for s in pw_sinks]
     sources = [{"id": s["id"], "name": s["desc"], "active": s["name"] == default_source}
                for s in pw_sources]
-    np = (await _out("playerctl", "metadata", "--format", "{{status}}|{{artist}} - {{title}}")).strip()
+    player = _pick_player(await _players())
+    psel = ("-p", player) if player else ()
+    np = (await _out("playerctl", *psel, "metadata", "--format", "{{status}}|{{artist}} - {{title}}")).strip()
     status, _, title = np.partition("|")
-    art_url = await _art_url()
+    art_url = await _art_url(player)
     return {
         "volume": int(m.group(1)) if m else None,
         "sink_muted": "yes" in (await _out("pactl", "get-sink-mute", "@DEFAULT_SINK@")),
@@ -113,6 +157,7 @@ async def snapshot() -> dict:
         "now_playing": {
             "status": status,
             "title": title.strip(" -"),
+            "player": player or "",
             # cache-bust key; the art itself is served by the /media/art proxy
             "art_key": hashlib.md5(art_url.encode()).hexdigest()[:12] if art_url else "",
         },
@@ -143,12 +188,15 @@ async def set_source(node_id) -> bool:
 async def media(action: str) -> bool:
     if action not in ("play-pause", "next", "previous"):
         return False
-    return await _fire("playerctl", action)
+    player = _pick_player(await _players())          # target the same player the strip shows
+    psel = ("-p", player) if player else ()
+    return await _fire("playerctl", *psel, action)
 
 
 # ---- cover art -------------------------------------------------------------
-async def _art_url() -> str:
-    return (await _out("playerctl", "metadata", "mpris:artUrl")).strip()
+async def _art_url(player: str | None = None) -> str:
+    psel = ("-p", player) if player else ()
+    return (await _out("playerctl", *psel, "metadata", "mpris:artUrl")).strip()
 
 
 def _image_type(data: bytes) -> str | None:
