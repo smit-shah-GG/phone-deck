@@ -16,7 +16,15 @@ async function fetchBrightness() {
 }
 
 // ---- PWA: service worker, wake lock, landscape lock (secure context only) ----
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/static/sw.js").catch(() => {});
+if ("serviceWorker" in navigator) {
+  // Root scope is load-bearing: the share-target bridge intercepts POST /share,
+  // which a /static/-scoped worker can never see.
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+  // Evict the old /static/-scoped registration from existing installs.
+  navigator.serviceWorker.getRegistrations().then((rs) =>
+    rs.forEach((r) => { if (new URL(r.scope).pathname === "/static/") r.unregister(); })
+  ).catch(() => {});
+}
 
 let wakeLock = null;
 async function keepAwake() {

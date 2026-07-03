@@ -27,11 +27,11 @@ from pathlib import Path
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, grab, hid, hypr, modes, sysinfo, telemetry, theme, voice
+from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, grab, hid, hypr, modes, share, sysinfo, telemetry, theme, voice
 
 BASE = Path(__file__).parent
 app = FastAPI(title="phone-deck")
@@ -349,6 +349,43 @@ async def screenshot(monitor: str, _=Depends(auth.require_auth)):
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), _=Depends(auth.require_auth)):
     return JSONResponse(grab.save_upload(file.filename, file.file))
+
+
+@app.get("/sw.js")
+async def sw_js():
+    # The service worker must be served from the root: a worker at /static/sw.js
+    # is scope-capped to /static/ and can never intercept the /share POST — which
+    # is the entire share-target auth bridge. Public like the rest of the shell.
+    return FileResponse(BASE / "static" / "sw.js", media_type="text/javascript")
+
+
+# ---- send-to-rig (Android share target) -------------------------------------
+@app.post("/share/api")
+async def share_api(title: str = Form(""), text: str = Form(""), url: str = Form(""),
+                    files: list[UploadFile] | None = File(None),
+                    _=Depends(auth.require_auth)):
+    # Called by the service worker (same-origin, so the Strict cookie attaches),
+    # never directly by the OS share sheet. `title` accepted but unused — it's
+    # usually app-generated junk.
+    return JSONResponse(await share.handle(url, text, files or []))
+
+
+@app.post("/share")
+async def share_fallback():
+    # Only reached when no service worker intercepted (first-ever run): the OS
+    # POST arrives cookie-less under SameSite=Strict, so no action is performed
+    # here — just tell the user how to arm the bridge. Deliberately unauthenticated
+    # and side-effect-free.
+    return HTMLResponse(
+        '<body style="margin:0;height:100vh;display:flex;align-items:center;'
+        'justify-content:center;background:#000;color:#ffb000;font-family:monospace;'
+        'text-align:center;padding:0 24px">open the deck app once (to arm its '
+        'service worker), then share again</body>')
+
+
+@app.get("/share")
+async def share_get():
+    return RedirectResponse("/", status_code=303)
 
 
 async def _video_input(msg: dict) -> None:
