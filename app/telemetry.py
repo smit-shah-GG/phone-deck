@@ -21,7 +21,16 @@ async def gpu() -> dict | None:
             "--format=csv,noheader,nounits",
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
         )
-        out, _ = await proc.communicate()
+        try:
+            # Bounded: a wedged nvidia-smi (driver hiccup mid-JAX) would otherwise
+            # freeze the 2s poll loop forever — same class as the _broadcast freeze.
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            return None
         if proc.returncode != 0 or not out:
             return None
         util, vram_used, vram_total, temp, draw, limit = (

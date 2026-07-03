@@ -216,7 +216,17 @@ class ScreenTrack(VideoStreamTrack):
     def stop(self):
         super().stop()
         if self._proc is not None and self._proc.poll() is None:
-            self._proc.terminate()
+            # SIGKILL, not SIGTERM: wf-recorder traps SIGTERM to flush its recording,
+            # and with our pipe reader gone that flush blocks forever — an immortal
+            # capture squatting on a screencopy session (seen in prod 2026-07-03,
+            # left video black for every later session). Rawvideo has no trailer
+            # worth flushing; kill is correct.
+            self._proc.kill()
+        if self._proc is not None:
+            try:
+                self._proc.wait(timeout=1)   # reap immediately (SIGKILL can't block)
+            except Exception:
+                pass
 
 
 _pc: RTCPeerConnection | None = None

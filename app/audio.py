@@ -23,7 +23,17 @@ async def _out(*args: str) -> str:
         p = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )
-        out, _ = await p.communicate()
+        try:
+            # Bounded: pw-dump/pactl can wedge during BT flaps; an unbounded await
+            # here freezes the 2s poll loop forever (same class as the _broadcast
+            # freeze, 2026-07-03). Kill and degrade to empty output instead.
+            out, _ = await asyncio.wait_for(p.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            try:
+                p.kill()
+            except ProcessLookupError:
+                pass
+            return ""
         return out.decode() if p.returncode == 0 else ""
     except OSError:
         return ""

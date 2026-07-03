@@ -191,7 +191,13 @@ async def watch_events(on_change):
                     break
                 event = line.decode(errors="ignore").split(">>", 1)[0]
                 if event in interesting:
-                    await on_change()
+                    try:
+                        await on_change()
+                    except Exception as e:  # noqa: BLE001 — the watcher must never die:
+                        # a one-off downstream failure (broadcast hiccup, transient
+                        # hyprctl error) would otherwise silently kill live updates
+                        # for the rest of the process lifetime.
+                        print(f"watch_events: on_change failed: {e!r}")
         except (ConnectionResetError, asyncio.IncompleteReadError):
             pass
         await asyncio.sleep(1)

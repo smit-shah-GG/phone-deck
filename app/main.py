@@ -46,10 +46,18 @@ _mon_sig: tuple = ()   # last-seen monitor name set; remap when it changes
 
 async def _broadcast():
     dead = set()
-    for ws in _clients:
+    # Iterate a snapshot: every await below yields, and a client (dis)connecting in
+    # that window mutates _clients -> "Set changed size during iteration" -> the
+    # exception kills whichever loop called us (killed watch_events 2026-07-04:
+    # frozen workspace state while everything else ran).
+    for ws in list(_clients):
         try:
-            await ws.send_json(_state)
-        except (WebSocketDisconnect, RuntimeError):
+            # Bounded send — a half-dead peer (network flap, sleeping phone) otherwise
+            # blocks this await forever on a full TCP buffer, freezing EVERY state loop
+            # that broadcasts (prod 2026-07-03: phantom audio devices, frozen telemetry,
+            # while HTTP and the input WS stayed healthy). 1s is generous even relayed.
+            await asyncio.wait_for(ws.send_json(_state), timeout=1.0)
+        except (WebSocketDisconnect, RuntimeError, asyncio.TimeoutError):
             dead.add(ws)
     _clients.difference_update(dead)
 
