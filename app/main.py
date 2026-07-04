@@ -110,7 +110,7 @@ async def _startup():
 
 @app.on_event("shutdown")
 async def _shutdown():
-    await audio_rtc.stop()
+    await audio_rtc.stop_all()   # stream slot + every pad session
     for t in app.state.tasks:
         t.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -399,8 +399,11 @@ async def _video_input(msg: dict) -> None:
                 if m["name"] == msg.get("monitor")), None)
     if not mon:
         return
-    gx = int(mon["x"] + min(1.0, max(0.0, float(msg.get("fx", 0)))) * mon["w"])
-    gy = int(mon["y"] + min(1.0, max(0.0, float(msg.get("fy", 0)))) * mon["h"])
+    # movecursor takes LOGICAL layout coords; w/h are physical px. Identical at
+    # scale 1 (the real monitors) — off by the scale factor on pads (1.6x).
+    sc = float(mon.get("scale") or 1.0)
+    gx = int(mon["x"] + min(1.0, max(0.0, float(msg.get("fx", 0)))) * mon["w"] / sc)
+    gy = int(mon["y"] + min(1.0, max(0.0, float(msg.get("fy", 0)))) * mon["h"] / sc)
     await hypr.move_cursor(gx, gy)
     if t == "vclick":
         hid.button("left", True); hid.button("left", False)

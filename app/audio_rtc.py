@@ -1,11 +1,16 @@
-"""WebRTC audio bridge (phase 2: rig -> phone).
+"""WebRTC bridge: audio (rig <-> phone) + screen video + extension-monitor pads.
 
 A custom MediaStreamTrack reads the rig's default-sink monitor via `parec` (raw
 48kHz s16 stereo) and hands frames to aiortc, which Opus-encodes and sends to the
 phone over a WebRTC PeerConnection. Reading a fixed chunk per recv() paces the
 track to real time (parec produces at 48kHz).
 
-Single session: a new offer replaces the previous one. Phone -> rig is phase 3.
+Session model: a keyed registry (the `stream` slot is the only key in use —
+single, replace-on-new-offer, sole audio carrier). The registry shape replaced
+bare module globals because it fixes a latent race (a replaced session's late
+disconnect callback could kill its successor) and gives clean per-key teardown.
+It also supports N-peer video classes if one ever earns its way back
+(see docs_internal/shelf/extension-monitor-SHELVED.md).
 """
 
 from __future__ import annotations
@@ -17,6 +22,16 @@ from fractions import Fraction
 import av
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.mediastreams import MediaStreamError, MediaStreamTrack
+
+# Raise the VP8 congestion-control ceiling: the stock 1.5 Mbps cap smears text,
+# and a pad is a MONITOR — text is its whole life. The estimator still adapts
+# downward on a bad path; we only lift where it's allowed to ramp.
+try:
+    from aiortc.codecs import vpx as _vpx
+    _vpx.DEFAULT_BITRATE = 2_000_000
+    _vpx.MAX_BITRATE = 8_000_000
+except (ImportError, AttributeError):   # aiortc internals moved — defaults still work
+    pass
 
 SAMPLE_RATE = 48000
 CHANNELS = 2
@@ -229,24 +244,47 @@ class ScreenTrack(VideoStreamTrack):
                 pass
 
 
-_pc: RTCPeerConnection | None = None
-_track: MonitorTrack | None = None
-_video: ScreenTrack | None = None
+# ---- session registry: "stream" (single, audio-carrying) + "pad:<id>" (N) ----
+_sessions: dict[str, dict] = {}          # key -> {"pc": RTCPeerConnection, "tracks": [...]}
 
 
-async def stop() -> None:
-    global _pc, _track, _video
-    if _track is not None:
-        _track.stop()
-        _track = None
-    if _video is not None:
-        _video.stop()
-        _video = None
-    if _pc is not None:
-        await _pc.close()
-        _pc = None
-    await _mic_teardown()
-    await _route_restore()
+async def _teardown(key: str) -> None:
+    s = _sessions.pop(key, None)
+    if s is None:
+        return
+    for t in s["tracks"]:
+        t.stop()
+    if s["pc"] is not None:
+        await s["pc"].close()
+    if key == "stream":                   # audio machinery belongs to the stream slot only
+        await _mic_teardown()
+        await _route_restore()
+
+
+async def stop(key: str = "stream") -> None:
+    await _teardown(key)
+
+
+async def stop_all() -> None:
+    for key in list(_sessions):
+        await _teardown(key)
+
+
+def _register(key: str) -> tuple[RTCPeerConnection, dict]:
+    """Create a session's pc with auto-cleanup on death. The identity guard
+    matters: a replaced session's late disconnect event must not kill its
+    successor under the same key."""
+    pc = RTCPeerConnection()
+    sess = {"pc": pc, "tracks": []}
+    _sessions[key] = sess
+
+    @pc.on("connectionstatechange")
+    async def _on_state():
+        if (pc.connectionState in ("failed", "closed", "disconnected")
+                and _sessions.get(key, {}).get("pc") is pc):
+            await _teardown(key)
+
+    return pc, sess
 
 
 async def _ice_complete(pc: RTCPeerConnection) -> None:
@@ -265,15 +303,8 @@ async def _ice_complete(pc: RTCPeerConnection) -> None:
 async def handle_offer(sdp: str, type_: str, listen: bool = True, mic: bool = False,
                        phone_only: bool = False, video: str | None = None,
                        video_quality: str = "medium") -> dict:
-    global _pc, _track, _video
-    await stop()                                  # replace any existing session
-    pc = RTCPeerConnection()
-    _pc = pc
-
-    @pc.on("connectionstatechange")
-    async def _on_state():
-        if pc.connectionState in ("failed", "closed", "disconnected"):
-            await stop()
+    await _teardown("stream")                     # single slot: replace any existing
+    pc, sess = _register("stream")
 
     if mic:
         await _mic_setup()
@@ -287,13 +318,15 @@ async def handle_offer(sdp: str, type_: str, listen: bool = True, mic: bool = Fa
 
     if listen:                                    # attach our send track to the recvonly m-line
         device = await (_route_to_virtual() if phone_only else _default_sink_monitor())
-        _track = MonitorTrack(device)
-        pc.addTrack(_track)
+        track = MonitorTrack(device)
+        sess["tracks"].append(track)
+        pc.addTrack(track)
 
     if video:                                     # video is a separate kind -> no transceiver ambiguity
         scale, fps = QUALITY.get(video_quality, QUALITY["medium"])
-        _video = ScreenTrack(video, scale=scale, fps=fps)
-        pc.addTrack(_video)
+        v = ScreenTrack(video, scale=scale, fps=fps)
+        sess["tracks"].append(v)
+        pc.addTrack(v)
 
     await pc.setLocalDescription(await pc.createAnswer())
     await _ice_complete(pc)                        # non-trickle: answer once gathering done

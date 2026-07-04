@@ -37,12 +37,25 @@ def _env() -> dict:
     return {**os.environ, "HYPRLAND_INSTANCE_SIGNATURE": _his()}
 
 
+async def _communicate(proc, timeout: float = 8):
+    """Bounded communicate — a wedged hyprctl (compositor mid-death) must not
+    freeze whichever loop called us. Same await-hygiene class as 68803c2."""
+    try:
+        return await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        return b"", b""
+
+
 async def _hyprctl_json(*args: str):
     proc = await asyncio.create_subprocess_exec(
         "hyprctl", "-j", *args, env=_env(),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
-    out, _ = await proc.communicate()
+    out, _ = await _communicate(proc)
     if proc.returncode != 0 or not out:
         return None
     return json.loads(out)
@@ -53,7 +66,7 @@ async def _hyprctl_dispatch(*args: str):
         "hyprctl", "dispatch", *args, env=_env(),
         stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
     )
-    await proc.communicate()
+    await _communicate(proc)
     return proc.returncode == 0
 
 
@@ -62,8 +75,23 @@ async def _hyprctl_keyword(*args: str) -> bool:
         "hyprctl", "keyword", *args, env=_env(),
         stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
     )
-    await proc.communicate()
+    await _communicate(proc)
     return proc.returncode == 0
+
+
+
+
+# Invisible-output armor (survivor of the shelved Extension Monitor, 2026-07-04):
+# any headless/virtual output that ever appears — a stray experiment, another tool —
+# must never join the physical 5-block workspace mapping, and workspaces at ws21+
+# must never swallow focus (an invisible workspace is a focus black hole; it cost
+# two windows before we learned). See docs_internal/shelf/extension-monitor-SHELVED.md.
+PAD_PREFIX = "pad-"
+PAD_WS_BASE = 21
+
+
+def is_pad(name: str) -> bool:
+    return name.startswith(PAD_PREFIX) or name.startswith("HEADLESS")
 
 
 async def apply_monitor_mapping(monitors: list[dict]) -> list[str]:
@@ -77,6 +105,7 @@ async def apply_monitor_mapping(monitors: list[dict]) -> list[str]:
     not move one that already exists (e.g. created during the cold-boot window before this
     service came up). So we also relocate any existing workspace that's on the wrong
     monitor, which makes a cold boot self-heal."""
+    monitors = [m for m in monitors if not is_pad(m["name"])]   # pads own ws21+
     existing = await _hyprctl_json("workspaces") or []
     ws_mon = {w["id"]: w.get("monitor", "") for w in existing}
     applied: list[str] = []
@@ -109,6 +138,7 @@ async def snapshot() -> dict:
                 "y": m.get("y", 0),
                 "w": m.get("width", 0),
                 "h": m.get("height", 0),
+                "scale": m.get("scale", 1.0),
             }
             for m in monitors
         ),
@@ -137,6 +167,11 @@ async def snapshot() -> dict:
 
 
 async def focus_workspace(ws_id: int) -> bool:
+    if int(ws_id) >= PAD_WS_BASE:
+        # Pad workspaces live on an invisible output — plain `workspace` would
+        # warp focus into the void. Reel the workspace onto the monitor the user
+        # is actually looking at instead (verified live 2026-07-03).
+        return await _hyprctl_dispatch("focusworkspaceoncurrentmonitor", str(int(ws_id)))
     return await _hyprctl_dispatch("workspace", str(int(ws_id)))
 
 
