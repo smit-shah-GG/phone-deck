@@ -151,7 +151,12 @@ def _search_blocking(query: str, n: int = 4) -> list[dict]:
 def _chat_blocking(messages: list[dict]) -> str:
     payload = {
         "model": MODEL, "messages": messages, "stream": False, "keep_alive": KEEP_ALIVE,
-        "options": {"temperature": 0.4, "num_predict": 512, "num_ctx": NUM_CTX},
+        # num_keep protects the FRONT of the prompt (the system message = our injected
+        # state) if the context ever overflows. Inert at 16384 (we run ~17% full), but it
+        # makes DECK_LLM_NUM_CTX safe to tune DOWN: an overflow then drops the oldest
+        # history instead of silently gutting the state (ollama's default n_keep is 4).
+        # 1024 covers the current + planned state block with margin.
+        "options": {"temperature": 0.4, "num_predict": 512, "num_ctx": NUM_CTX, "num_keep": 1024},
     }
     req = urllib.request.Request(
         OLLAMA_URL, data=json.dumps(payload).encode(),
