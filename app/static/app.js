@@ -549,6 +549,7 @@ async function loadModes() {
 
   function set(s) {
     state = s;
+    window._voiceBusy = s !== "idle";   // cogitator must never idle-in mid-recording
     btn.disabled = s === "processing";
     btn.className = base + (s === "idle" ? "bg-emerald-700"
       : s === "recording" ? "bg-red-700 animate-pulse" : "bg-zinc-700 opacity-70");
@@ -850,6 +851,7 @@ function render(s) {
   renderWorkspaces(s);
   renderAudio(s);
   renderSystem(s);
+  cogFeed(s);
 }
 
 function connect() {
@@ -882,8 +884,245 @@ window.addEventListener("resize", applyDensity);
     const link = document.querySelector('link[href^="/theme.css"]');
     if (link) link.href = "/theme.css?t=" + Date.now();   // re-fetch the skin in place
   });
-  fetch("/theme").then((r) => r.json()).then((d) => { if (d.profile) segSet(sel, d.profile); }).catch(() => {});
+  // Ambient (cogitator) settings live in the same config file/endpoint.
+  const idleSeg = document.getElementById("amb-idle"), lit = document.getElementById("amb-lit");
+  segInit(idleSeg, async (v) => { cogCfg.idle_min = +v; await post("/theme", { ambient: { idle_min: +v } }); });
+  if (lit) lit.onclick = async () => {
+    cogCfg.liturgy = !cogCfg.liturgy;
+    lit.classList.toggle("on", cogCfg.liturgy);
+    await post("/theme", { ambient: { liturgy: cogCfg.liturgy } });
+  };
+  fetch("/theme").then((r) => r.json()).then((d) => {
+    if (d.profile) segSet(sel, d.profile);
+    if (d.ambient) {
+      Object.assign(cogCfg, d.ambient);
+      segSet(idleSeg, String(cogCfg.idle_min));
+      if (lit) lit.classList.toggle("on", !!cogCfg.liturgy);
+    }
+  }).catch(() => {});
 })();
+
+// ---- Ambient Cogitator (V2.5) ----------------------------------------------
+// Idle screen: instrument cluster (device-grouped dials, peak-hold ghosts),
+// clock, duotone now-playing, liturgy. ONE locked screen — not a widget farm.
+const cogCfg = { idle_min: 2, liturgy: true };
+const cogEl = document.getElementById("cog");
+const COG_RM = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let cogOn = false, cogLast = Date.now(), cogRaf = 0, cogTick = null, cogLit = null;
+let cogDisp = null, cogPeak = null, cogLitIdx = 0, cogArtKey = "";
+
+function cogCur() {
+  const t = lastState.telemetry || {}, g = t.gpu || {}, c = t.cpu || {};
+  return { g: g.util ?? 0, gt: g.temp ?? 0, vr: g.vram_used ?? 0, vt: g.vram_total || 12288,
+           c: c.util ?? 0, ct: c.temp ?? 0, ram: c.mem_used ?? 0, rt: c.mem_total || 32 };
+}
+function cogFeed() {                       // live peak accumulation while ambient
+  if (!cogOn || !cogPeak) return;
+  const cur = cogCur();
+  for (const k in cur) if (cur[k] > (cogPeak[k] ?? 0)) cogPeak[k] = cur[k];
+}
+
+// colors: device grouping — GPU pair = theme primary, CPU pair = counter-color
+// (amber, unless the primary itself is amber-adjacent -> green). Danger = red.
+function cogColors() {
+  const hex = getComputedStyle(document.documentElement).getPropertyValue("--p-primary").trim() || "#33ffa0";
+  const n = hex.replace("#", "");
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let h = 0;
+  if (mx !== mn) {
+    h = mx === r ? (g - b) / (mx - mn) : mx === g ? 2 + (b - r) / (mx - mn) : 4 + (r - g) / (mx - mn);
+    h = (h * 60 + 360) % 360;
+  }
+  const amberish = Math.abs(h - 41) < 40;
+  return { P: `${r},${g},${b}`, A: amberish ? "51,255,160" : "255,176,0", R: "255,82,82" };
+}
+
+function cogMetrics(cur, C) {
+  return [
+    { k: "g",   lab: "GPU",  unit: "%", lo: 0,  max: 100,    warn: .80, col: C.P, fmt: (v) => v.toFixed(0) },
+    { k: "gt",  lab: "GPU°", unit: "°", lo: 30, max: 90,     warn: .75, col: C.P, fmt: (v) => v.toFixed(0) },
+    { k: "c",   lab: "CPU",  unit: "%", lo: 0,  max: 100,    warn: .80, col: C.A, fmt: (v) => v.toFixed(0) },
+    { k: "ct",  lab: "CPU°", unit: "°", lo: 30, max: 90,     warn: .75, col: C.A, fmt: (v) => v.toFixed(0) },
+    { k: "vr",  lab: "VRAM", unit: "G", lo: 0,  max: cur.vt, warn: .85, col: C.P, fmt: (v) => (v / 1024).toFixed(1) },
+    { k: "ram", lab: "RAM",  unit: "G", lo: 0,  max: cur.rt, warn: .85, col: C.A, fmt: (v) => v.toFixed(1) },
+  ];
+}
+
+function cogDraw() {
+  const cv = document.getElementById("cog-cv"), ctx = cv.getContext("2d");
+  const dpr = devicePixelRatio || 1, box = cv.parentElement.getBoundingClientRect();
+  if (cv.width !== Math.round(box.width * dpr)) { cv.width = Math.round(box.width * dpr); cv.height = Math.round(box.height * dpr); }
+  const W = cv.width, H = cv.height, px = (n) => n * dpr;
+  const cur = cogCur(), C = cogColors(), M = cogMetrics(cur, C);
+  if (!cogDisp) cogDisp = { ...cur };
+  for (const k in cur) cogDisp[k] = COG_RM ? cur[k] : cogDisp[k] + (cur[k] - cogDisp[k]) * .06;
+  const frac = (m, v) => Math.max(0, Math.min(1, (v - m.lo) / (m.max - m.lo)));
+  ctx.clearRect(0, 0, W, H);
+
+  const dials = M.slice(0, 4), bars = M.slice(4);
+  const zoneH = H * .66, r = Math.min(W / 9.2, zoneH / 2.55);
+  const a0 = Math.PI * .75, span = Math.PI * 1.5, CX = [.125, .365, .635, .875];
+  dials.forEach((m, i) => {
+    const cx = W * CX[i], cy = zoneH * .52, col = m.col;
+    const f = frac(m, cogDisp[m.k]), fp = frac(m, (cogPeak || cur)[m.k]), hot = f >= m.warn;
+    ctx.save();
+    ctx.lineWidth = px(2); ctx.strokeStyle = `rgba(${col},.20)`;
+    ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + span); ctx.stroke();
+    ctx.strokeStyle = `rgba(${C.R},.4)`;
+    ctx.beginPath(); ctx.arc(cx, cy, r, a0 + span * m.warn, a0 + span); ctx.stroke();
+    for (let t = 0; t <= 10; t++) {
+      const a = a0 + span * t / 10, big = t % 5 === 0;
+      ctx.strokeStyle = `rgba(${col},${big ? .32 : .13})`; ctx.lineWidth = px(big ? 1.6 : 1);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * (r - px(big ? 7 : 4)), cy + Math.sin(a) * (r - px(big ? 7 : 4)));
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
+    }
+    const ap = a0 + span * fp;                                  // peak-hold ghost
+    ctx.strokeStyle = `rgba(${col},.22)`; ctx.lineWidth = px(1.6);
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ap) * r * .82, cy + Math.sin(ap) * r * .82); ctx.stroke();
+    const av = a0 + span * f;                                   // needle
+    ctx.strokeStyle = hot ? `rgba(${C.R},.9)` : `rgba(${col},.85)`;
+    ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = px(8); ctx.lineWidth = px(2.2);
+    ctx.beginPath(); ctx.moveTo(cx - Math.cos(av) * r * .12, cy - Math.sin(av) * r * .12);
+    ctx.lineTo(cx + Math.cos(av) * r * .82, cy + Math.sin(av) * r * .82); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(${col},.75)`;
+    ctx.beginPath(); ctx.arc(cx, cy, px(2.5), 0, 7); ctx.fill();
+    ctx.fillStyle = hot ? `rgba(${C.R},.9)` : `rgba(${col},.78)`;
+    ctx.font = `600 ${px(16)}px "IBM Plex Mono",monospace`; ctx.textAlign = "center";
+    ctx.fillText(m.fmt(cogDisp[m.k]) + m.unit, cx, cy + r * .62);
+    ctx.fillStyle = `rgba(${col},.35)`; ctx.font = `${px(10)}px "IBM Plex Mono",monospace`;
+    ctx.fillText(m.lab, cx, cy + r + px(15));
+    ctx.restore();
+  });
+  bars.forEach((m, i) => {                                      // VRAM under GPU pair, RAM under CPU pair
+    const bw = W * .42, bh = px(12), bx = W * (i === 0 ? .05 : .53), by = H * .78, col = m.col;
+    const f = frac(m, cogDisp[m.k]), fp = frac(m, (cogPeak || cur)[m.k]), hot = f >= m.warn;
+    ctx.save();
+    ctx.strokeStyle = `rgba(${col},.22)`; ctx.lineWidth = px(1);
+    ctx.strokeRect(bx, by, bw, bh);
+    ctx.fillStyle = hot ? `rgba(${C.R},.75)` : `rgba(${col},.5)`;
+    ctx.shadowColor = `rgba(${col},.45)`; ctx.shadowBlur = px(5);
+    ctx.fillRect(bx + px(1.5), by + px(1.5), (bw - px(3)) * f, bh - px(3));
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(${col},.4)`;
+    ctx.beginPath(); ctx.moveTo(bx + bw * fp, by - px(2)); ctx.lineTo(bx + bw * fp, by + bh + px(2)); ctx.stroke();
+    ctx.fillStyle = `rgba(${col},.55)`; ctx.font = `${px(10)}px "IBM Plex Mono",monospace`; ctx.textAlign = "left";
+    const total = m.k === "vr" ? (cur.vt / 1024).toFixed(0) : cur.rt.toFixed(0);
+    ctx.fillText(`${m.lab} ${m.fmt(cogDisp[m.k])}/${total}${m.unit}`, bx, by + bh + px(14));
+    ctx.restore();
+  });
+}
+
+function cogChrome() {                     // clock/date/uptime/now-playing refresh
+  const d = new Date(), hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+  document.getElementById("cog-clock").innerHTML =
+    `${hh}<span class="cln${d.getSeconds() % 2 ? " off" : ""}">:</span>${mm}`;
+  document.getElementById("cog-date").textContent =
+    d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" }).toUpperCase();
+  const boot = lastState.sysinfo?.boot;
+  if (boot) {
+    const up = Math.max(0, Date.now() / 1000 - boot);
+    document.getElementById("cog-uptime").textContent =
+      `UPTIME ${Math.floor(up / 86400)}D ${String(Math.floor(up / 3600) % 24).padStart(2, "0")}H ${String(Math.floor(up / 60) % 60).padStart(2, "0")}M`;
+  }
+  const np = lastState.audio?.now_playing, wrap = document.getElementById("cog-artwrap");
+  if (np && np.title) {
+    document.getElementById("cog-np-status").textContent = np.status === "Playing" ? "▶ PLAYING" : "‖ PAUSED";
+    document.getElementById("cog-np-title").textContent = np.title;
+    if (np.art_key && np.art_key !== cogArtKey) {
+      cogArtKey = np.art_key;
+      document.getElementById("cog-art").src = `/media/art?k=${np.art_key}`;
+    }
+    wrap.classList.toggle("hidden", !np.art_key);
+  } else {
+    document.getElementById("cog-np-status").textContent = "— NO SIGNAL —";
+    document.getElementById("cog-np-title").textContent = "";
+    wrap.classList.add("hidden");
+  }
+}
+
+const COG_LITANY = [
+  () => "++ cogitator vigil unbroken ++",
+  () => `++ thermal rites nominal : ${cogCur().gt.toFixed(0)}°C ++`,
+  () => `++ vram offering : ${(cogCur().vr / 1024).toFixed(1)}G consecrated ++`,
+  () => "++ the omnissiah preserves : all systems sanctified ++",
+  () => `++ canticle of load : ${cogCur().g.toFixed(0)}% devotion ++`,
+];
+
+function cogShow() {
+  if (cogOn) return;
+  cogOn = true;
+  cogDisp = null;
+  cogPeak = { ...cogCur() };
+  // Seed peaks from history since last touch — "was it pegged while I was away"
+  // works even if the deck app was hidden/restarted during the away period.
+  fetch("/history").then((r) => r.json()).then((h) => {
+    if (!cogOn) return;
+    for (const s of h) {
+      if (s.t < cogLast) continue;
+      for (const k of ["g", "gt", "vr", "c", "ct", "ram"])
+        if (s[k] != null && s[k] > cogPeak[k]) cogPeak[k] = s[k];
+    }
+  }).catch(() => {});
+  document.getElementById("cog-liturgy").style.display = cogCfg.liturgy ? "" : "none";
+  cogChrome(); cogEl.classList.remove("hidden");
+  cogTick = setInterval(cogChrome, 500);
+  cogLit = setInterval(() => {
+    const el = document.getElementById("cog-liturgy");
+    el.classList.add("fade");
+    setTimeout(() => { cogLitIdx = (cogLitIdx + 1) % COG_LITANY.length; el.textContent = COG_LITANY[cogLitIdx](); el.classList.remove("fade"); }, 1200);
+  }, 30000);
+  let last = 0;
+  const loop = (ts) => {
+    if (!cogOn) return;
+    if (ts - last >= 33) {
+      last = ts;
+      cogDraw();
+      if (!COG_RM) {
+        const t = ts / 1000;   // Lissajous pixel drift (AMOLED)
+        document.getElementById("cog-drift").style.transform =
+          `translate(${(8 * Math.sin(t / 29)).toFixed(2)}px, ${(8 * Math.sin(t / 37)).toFixed(2)}px)`;
+      }
+    }
+    cogRaf = requestAnimationFrame(loop);
+  };
+  cogRaf = requestAnimationFrame(loop);
+}
+
+function cogHide() {
+  if (!cogOn) return;
+  cogOn = false;
+  cancelAnimationFrame(cogRaf);
+  clearInterval(cogTick); clearInterval(cogLit);
+  cogEl.classList.add("hidden");           // exact tab untouched underneath
+}
+
+// entry/exit wiring: any activity resets idle; touch while ambient exits (and
+// is swallowed — an exit tap must never click through to the deck).
+// The overlay hides on pointerdown, so the gesture's synthesized `click` would
+// otherwise land on whatever control is now underneath — eat that one click.
+function cogEatClick() {
+  const eat = (ce) => { ce.preventDefault(); ce.stopPropagation(); };
+  document.addEventListener("click", eat, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener("click", eat, { capture: true }), 800);
+}
+["pointerdown", "keydown", "wheel"].forEach((ev) =>
+  document.addEventListener(ev, (e) => {
+    cogLast = Date.now();
+    if (cogOn) {
+      e.preventDefault(); e.stopPropagation(); cogHide();
+      if (ev === "pointerdown") cogEatClick();
+    }
+  }, { capture: true, passive: false }));
+setInterval(() => {
+  if (!cogOn && document.visibilityState === "visible" && !window._voiceBusy
+      && Date.now() - cogLast > cogCfg.idle_min * 60000) cogShow();
+}, 5000);
+document.getElementById("st-clock").addEventListener("click", cogShow);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") cogLast = Date.now(); });
 
 connect();
 connectInput();

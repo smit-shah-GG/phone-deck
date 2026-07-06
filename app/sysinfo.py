@@ -80,4 +80,5 @@ async def lock() -> bool:
 
 
 async def snapshot() -> dict:
-    return {"tailscale": await tailscale(), "procs": top_procs()}
+    return {"tailscale": await tailscale(), "procs": top_procs(),
+            "boot": int(psutil.boot_time())}   # cogitator uptime readout

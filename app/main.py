@@ -21,6 +21,8 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXP
 import asyncio
 import contextlib
 import mimetypes
+import time
+from collections import deque
 from pathlib import Path
 
 # Chrome rejects a manifest served as octet-stream — register the right type.
@@ -42,6 +44,9 @@ templates = Jinja2Templates(directory=BASE / "templates")
 _clients: set[WebSocket] = set()
 _state: dict = {"hypr": {}, "telemetry": {}, "audio": {}, "sysinfo": {}}
 _mon_sig: tuple = ()   # last-seen monitor name set; remap when it changes
+# Cogitator telemetry history: volatile by design (~90 min @ 2s). Durable history
+# is the V3 Flight Recorder's job; dying on restart is correct scope hygiene.
+_history: deque = deque(maxlen=2700)
 
 
 async def _broadcast():
@@ -78,6 +83,15 @@ async def _fast_loop():  # telemetry + audio
     while True:
         _state["telemetry"] = await telemetry.snapshot()
         _state["audio"] = await audio.snapshot()
+        g = _state["telemetry"].get("gpu") or {}
+        c = _state["telemetry"].get("cpu") or {}
+        _history.append({
+            "t": int(time.time() * 1000),
+            "g": g.get("util"), "gt": g.get("temp"),
+            "vr": g.get("vram_used"), "vt": g.get("vram_total"),
+            "c": c.get("util"), "ct": c.get("temp"),
+            "ram": c.get("mem_used"), "rt": c.get("mem_total"),
+        })
         await _broadcast()
         await asyncio.sleep(2)
 
@@ -126,12 +140,25 @@ async def theme_css():
 
 @app.get("/theme")
 async def theme_get(_=Depends(auth.require_auth)):
-    return JSONResponse({"profile": theme._profile()})
+    return JSONResponse({"profile": theme._profile(), "ambient": theme.ambient()})
 
 
 @app.post("/theme")
 async def theme_set(payload: dict, _=Depends(auth.require_auth)):
-    return JSONResponse(theme.set_profile(payload.get("profile", "green")))
+    out: dict = {}
+    if "profile" in payload:
+        out = theme.set_profile(payload.get("profile", "green"))
+        if not out.get("ok"):
+            return JSONResponse(out)
+    if isinstance(payload.get("ambient"), dict):
+        out = theme.set_ambient(payload["ambient"])
+    return JSONResponse(out or {"ok": False, "error": "nothing to set"})
+
+
+@app.get("/history")
+async def history(_=Depends(auth.require_auth)):
+    # Cogitator backfill: the last ~90 min of 2s telemetry samples.
+    return JSONResponse(list(_history))
 
 
 @app.get("/login", response_class=HTMLResponse)

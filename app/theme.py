@@ -47,23 +47,62 @@ PROFILES: dict[str, dict[str, str]] = {
 VALID_PROFILES = ("green", "amber", "ice", "auto")
 
 
-def _profile() -> str:
+_AMBIENT_DEFAULT = {"idle_min": 2, "liturgy": True}
+
+
+def _cfg() -> dict:
     try:
-        p = json.loads(THEME_FILE.read_text()).get("profile", "green")
-        return p if p in VALID_PROFILES else "green"
+        d = json.loads(THEME_FILE.read_text())
+        return d if isinstance(d, dict) else {}
     except (OSError, json.JSONDecodeError):
-        return "green"
+        return {}
+
+
+def _write_cfg(**updates) -> str | None:
+    """Merge-write theme.json (profile + ambient share the file — never clobber)."""
+    try:
+        config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        THEME_FILE.write_text(json.dumps({**_cfg(), **updates}))
+        return None
+    except OSError as exc:
+        return str(exc)
+
+
+def _profile() -> str:
+    p = _cfg().get("profile", "green")
+    return p if p in VALID_PROFILES else "green"
 
 
 def set_profile(p: str) -> dict:
     if p not in VALID_PROFILES:
         return {"ok": False, "error": "unknown profile"}
+    err = _write_cfg(profile=p)
+    return {"ok": False, "error": err} if err else {"ok": True, "profile": p}
+
+
+def ambient() -> dict:
+    """Cogitator settings, clamped sane: {idle_min: 1-30, liturgy: bool}."""
+    a = _cfg().get("ambient", {})
+    out = dict(_AMBIENT_DEFAULT)
+    if isinstance(a, dict):
+        if isinstance(a.get("idle_min"), (int, float)):
+            out["idle_min"] = max(1, min(30, int(a["idle_min"])))
+        if isinstance(a.get("liturgy"), bool):
+            out["liturgy"] = a["liturgy"]
+    return out
+
+
+def set_ambient(a: dict) -> dict:
+    cur = ambient()
     try:
-        config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        THEME_FILE.write_text(json.dumps({"profile": p}))
-    except OSError as exc:
-        return {"ok": False, "error": str(exc)}
-    return {"ok": True, "profile": p}
+        if "idle_min" in a:
+            cur["idle_min"] = max(1, min(30, int(a["idle_min"])))
+        if "liturgy" in a:
+            cur["liturgy"] = bool(a["liturgy"])
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "bad ambient values"}
+    err = _write_cfg(ambient=cur)
+    return {"ok": False, "error": err} if err else {"ok": True, "ambient": cur}
 
 
 def _hex_to_hls(h: str) -> tuple[float, float, float]:
