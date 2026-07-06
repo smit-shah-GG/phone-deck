@@ -5,9 +5,10 @@ control deck and remote desktop for your Linux workstation — over your private
 Tailscale network, with no third-party apps.
 
 It started as "what do I do with an old phone?" and became a control plane for a
-Hyprland rig: window/workspace control, scene macros, performance toggles, audio
-routing, two-way audio + screen streaming, a touch remote-desktop, a virtual
-keyboard/mouse, file transfer, and live telemetry — all served as an installed PWA.
+Hyprland rig: window/workspace control, scene macros, a push-to-talk voice router with a
+local-LLM assistant, context-aware in-app controls, two-way audio + screen streaming, a
+touch remote-desktop, a virtual keyboard/mouse, file transfer + phone→PC sharing, and live
+telemetry — all served as an installed PWA with a phosphor-terminal look.
 
 > **Note on portability.** This was built for one specific setup: **Arch-based Linux
 > (Garuda) + Hyprland + PipeWire + NVIDIA + Tailscale**, with the
@@ -27,13 +28,24 @@ The UI is a tabbed, dark, landscape web app (theme-synced to your desktop):
 | **Workspaces** | Live per-monitor workspace grid (tap to switch), live window list (tap to focus), per-monitor DPMS toggle + `ddcutil` brightness |
 | **Remote** | On-screen trackpad (drag/tap/two-finger) + virtual keyboard with modifiers & combos, via a kernel `uinput` device |
 | **Modes** | One-tap scene macros — launch/close/arrange whole app layouts across monitors (e.g. "Work" / "Free") |
-| **Performance** | CPU governor, Intel turbo, NVIDIA power-limit slider |
-| **Commands** | Your own shell actions (redeploys, scripts), config-driven, with exit status + output |
-| **Audio** | Mic/speaker mute, volume, output **and** input device pickers, `playerctl` transport + cover art |
+| **Voice** | Push-to-talk voice router (faster-whisper, CPU): lead-word lanes — `macro` (run a mode/command), `type` (dictate), `input` (phrase → key chord) — with **confirm-before-execute**, plus **"friday"**, a read-only local-LLM answerer (Ollama + Qwen) with self-hosted web search and live system-state awareness |
+| **Audio** | Mic/speaker mute, volume, output **and** input device pickers, `playerctl` transport + cover art (tracks the active MPRIS player) |
 | **Stream** | Bidirectional **WebRTC audio** (PC↔phone, with phone-as-mic and phone-only output) **+ screen video**, and **tap-to-control the streamed screen** = a real remote desktop |
-| **System** | Tailscale status, top processes (tap to kill), lock, NetworkManager restart, suspend/reboot/poweroff |
+| **System** | Performance-mode toggle, live **theme** switching, Tailscale status, top processes (tap to kill), lock, NetworkManager restart, suspend/reboot/poweroff |
 | **Files** | Screenshot a monitor → view/download on the phone; drop a file phone→PC |
-| **Config** | Edit the `commands.json` / `modes.json` config from the phone (JSON-validated) |
+| **Config** | Edit the `commands.json` / `modes.json` (and context/voice) config from the phone (JSON-validated) |
+
+Always on, above the tabs — a **context strip** that surfaces what's happening right now:
+an active call (mute / jump-to it), media now-playing + transport, and in-app keyboard
+controls for the focused app (YouTube / Brave / Teams), delivered *without stealing focus*.
+
+Two more, beyond the tabs:
+
+- **Send-to-Rig** — the PWA registers as an Android **share target**: share an image, some
+  text, or a link from any app on your phone and it lands on the rig — images saved to a drop
+  dir *and* placed on the clipboard as paste-ready PNG, text to the clipboard, a bare link opened.
+- **Ambient Cogitator** — after a few idle minutes the deck becomes a phosphor instrument panel:
+  needle-dial telemetry with peak-hold ("was it pegged while I was away?"), clock, now-playing.
 
 Plus: on-screen numpad PIN login, screen wake-lock, fullscreen landscape PWA, and
 brute-force lockout on the login.
@@ -197,12 +209,14 @@ workspace = 2, monitor:DP-3
 # … etc
 ```
 
-### Theme sync
+### Theme
 
-`app/theme.py` serves `/theme.css` generated from a matugen palette
-(`~/.local/state/quickshell/user/generated/colors.json` by default) so the deck matches
-your desktop, refreshing on reload. If that file is absent it falls back to a built-in
-dark theme — edit `theme.py` to point at your own palette source.
+The deck wears a **phosphor-terminal** skin with four live-switchable color profiles —
+**green** (default), **amber**, **ice**, and **auto** (derives the phosphor hue from your
+matugen wallpaper palette, `~/.local/state/quickshell/user/generated/colors.json`). Switch
+it in the **System** tab; the choice persists in `~/.config/phone-deck/theme.json`.
+`app/theme.py` serves it as `/theme.css`. The Ambient Cogitator's idle timeout and liturgy
+line are configurable here too.
 
 ---
 
