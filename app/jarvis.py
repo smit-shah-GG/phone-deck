@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,6 +31,15 @@ HISTORY_FILE = config.CONFIG_DIR / "jarvis_history.json"
 HISTORY_TURNS = 8                 # keep the last N user+assistant exchanges
 MIN_FREE_VRAM_MB = 5000           # ~5 GB needed to load Qwen2.5-7B Q4
 REQUEST_TIMEOUT = 90
+
+# Context window ollama runs the model at. qwen2.5:7b supports 32768; ollama's
+# default is a mere 4096 (silent front-truncation past it, which would drop the
+# injected system-state). Tunable via env; 16384 measured at ~5.4 GB VRAM on the
+# 3060 (KV cache ~56 KB/token) — leaves ample headroom for state + history + search.
+try:
+    NUM_CTX = int(os.environ.get("DECK_LLM_NUM_CTX", "16384"))
+except ValueError:
+    NUM_CTX = 16384
 
 _SYSTEM = (
     "You are JARVIS, a terse read-only assistant embedded in a Linux (Hyprland) control "
@@ -141,7 +151,7 @@ def _search_blocking(query: str, n: int = 4) -> list[dict]:
 def _chat_blocking(messages: list[dict]) -> str:
     payload = {
         "model": MODEL, "messages": messages, "stream": False, "keep_alive": KEEP_ALIVE,
-        "options": {"temperature": 0.4, "num_predict": 512},
+        "options": {"temperature": 0.4, "num_predict": 512, "num_ctx": NUM_CTX},
     }
     req = urllib.request.Request(
         OLLAMA_URL, data=json.dumps(payload).encode(),
