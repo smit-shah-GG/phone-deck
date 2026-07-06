@@ -80,6 +80,19 @@ def _state_line(state: dict) -> str:
         parts.append(f"playing '{np}'")
     parts.append(f"volume {a.get('volume', '?')}%" + (" muted" if a.get("sink_muted") else "")
                  + (", mic muted" if a.get("mic_muted") else ""))
+    # Full open-window list, so "what apps are open" works — titles read better
+    # than window classes (browser PWAs have hash-gibberish classes). Capped so a
+    # busy desktop can't blow the local model's context.
+    wins = h.get("windows") or []
+    if wins:
+        def _nm(w):
+            n = (w.get("title") or w.get("cls") or "?").strip()
+            return (n[:27] + "…") if len(n) > 28 else n
+        shown = wins[:16]
+        listing = ", ".join(f"{_nm(w)}[ws{w.get('ws')}]" for w in shown)
+        if len(wins) > len(shown):
+            listing += f", +{len(wins) - len(shown)} more"
+        parts.append(f"{len(wins)} open windows: {listing}")
     if aw.get("class"):
         parts.append(f"focused app {aw.get('class')}")
     if foc:
