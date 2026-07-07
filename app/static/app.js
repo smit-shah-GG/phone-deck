@@ -676,6 +676,9 @@ function renderStatus(s) {
 function renderWorkspaces(s) {
   const grid = document.querySelector('[data-page="workspaces"]');
   const mons = s.hypr?.monitors || [];
+  // Column count tracks the monitor count (capped at 3), so a single-monitor laptop
+  // gets a full-width card instead of one stranded in the left third of the screen.
+  grid.style.gridTemplateColumns = `repeat(${Math.min(mons.length || 1, 3)}, minmax(0, 1fr))`;
   grid.innerHTML = mons.map((m) => `
     <div class="bg-zinc-900 rounded-xl p-3">
       <div class="text-xs text-zinc-500 mb-2 truncate">${m.name} · ${m.model || ""} · ${m.refresh}Hz

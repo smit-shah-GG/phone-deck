@@ -106,6 +106,12 @@ async def apply_monitor_mapping(monitors: list[dict]) -> list[str]:
     service came up). So we also relocate any existing workspace that's on the wrong
     monitor, which makes a cold boot self-heal."""
     monitors = [m for m in monitors if not is_pad(m["name"])]   # pads own ws21+
+    # A single-monitor host (the laptops) has nothing to partition — every workspace
+    # lands on the only output anyway. Binding ws1-5 to it would impose a phantom
+    # 5-workspace ceiling and churn moveworkspacetomonitor relocations; leave Hyprland's
+    # native single-monitor behavior alone. (Dock a 2nd monitor -> partition resumes.)
+    if len(monitors) <= 1:
+        return []
     existing = await _hyprctl_json("workspaces") or []
     ws_mon = {w["id"]: w.get("monitor", "") for w in existing}
     applied: list[str] = []
