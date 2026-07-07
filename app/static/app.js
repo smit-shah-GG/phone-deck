@@ -679,11 +679,17 @@ function renderWorkspaces(s) {
   // Column count tracks the monitor count (capped at 3), so a single-monitor laptop
   // gets a full-width card instead of one stranded in the left third of the screen.
   grid.style.gridTemplateColumns = `repeat(${Math.min(mons.length || 1, 3)}, minmax(0, 1fr))`;
+  // On a single wide card, cap the workspace buttons (aspect-square would otherwise
+  // balloon each to width/5 -> 3 rows of giant squares that overflow the page). Small
+  // fixed squares that flow. Multi-monitor cards are narrow, so keep the clean 5-up.
+  const wsCols = mons.length <= 1
+    ? "repeat(auto-fit, minmax(2.75rem, 3rem))"
+    : "repeat(5, minmax(0, 1fr))";
   grid.innerHTML = mons.map((m) => `
     <div class="bg-zinc-900 rounded-xl p-3">
       <div class="text-xs text-zinc-500 mb-2 truncate">${m.name} · ${m.model || ""} · ${m.refresh}Hz
         ${m.focused ? '<span class="text-emerald-500">●</span>' : ""}</div>
-      <div class="grid grid-cols-5 gap-1.5 content-start">
+      <div class="grid gap-1.5 content-start" style="grid-template-columns:${wsCols}">
         ${Array.from({length: WS_COUNT}, (_, i) => i + 1).map((n) => `
           <button class="ws aspect-square rounded-lg text-sm font-medium
             ${m.active_ws === n ? "bg-emerald-600" : "bg-zinc-800"}"
