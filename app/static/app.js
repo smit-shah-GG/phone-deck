@@ -1076,6 +1076,7 @@ function cogShow() {
         if (s[k] != null && s[k] > cogPeak[k]) cogPeak[k] = s[k];
     }
   }).catch(() => {});
+  renderOutposts(); fetchFleet();   // instant from cached roster, then refresh live status
   document.getElementById("cog-liturgy").style.display = cogCfg.liturgy ? "" : "none";
   cogChrome(); cogEl.classList.remove("hidden");
   cogTick = setInterval(cogChrome, 500);
@@ -1141,6 +1142,7 @@ async function fetchFleet() {
   try { const r = await fetch("/fleet"); fleetHosts = r.ok ? await r.json() : []; }
   catch (_) { fleetHosts = []; }
   renderHost();
+  renderOutposts();   // the Cogitator's ambient fleet board reads the same roster
 }
 function renderHost() {
   const self = _selfKey();
@@ -1167,6 +1169,27 @@ function renderHost() {
     if (b.dataset.here === "1") { hostMenu(false); return; }   // already on this bird
     location.href = b.dataset.url;                              // navigate: its own origin/cookie/WS
   }));
+}
+// Ambient fleet board in the Cogitator's reserved outposts socket. Display-only
+// (the cog dismisses on any touch); dots semantic (green/grey/amber), names phosphor.
+function renderOutposts() {
+  const el = document.getElementById("cog-socket-outposts");
+  if (!el) return;
+  if (!fleetHosts.length) { el.textContent = "· V3 · OUTPOSTS ·"; return; }
+  const self = _selfKey();
+  const dot = (o) => o === true ? "#33ff9a" : (o === false ? "rgba(255,255,255,.22)" : "#ffb000");
+  el.innerHTML =
+    '<div style="opacity:.4;margin-bottom:6px">· OUTPOSTS ·</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px;font-size:10px;letter-spacing:.1em;text-align:left">' +
+    fleetHosts.map((h) => {
+      const here = _hostKey(h.url) === self;
+      return `<div style="display:flex;align-items:center;gap:6px;${here ? "color:var(--p-primary)" : "opacity:.5"}">`
+        + `<span style="color:${dot(h.online)};font-size:7px;line-height:1">●</span>`
+        + `<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(h.name || "").toUpperCase().replace(/</g, "&lt;")}</span>`
+        + (here ? '<span style="opacity:.55;font-size:7px">HERE</span>' : "")
+        + "</div>";
+    }).join("") +
+    "</div>";
 }
 function hostMenu(show) {
   const menu = document.getElementById("host-menu");
