@@ -1171,8 +1171,19 @@ function renderHost() {
 function hostMenu(show) {
   const menu = document.getElementById("host-menu");
   const willShow = show === undefined ? menu.classList.contains("hidden") : show;
+  if (willShow) {
+    // Position via the button's viewport rect. NOTE: set position:fixed INLINE — the
+    // menu's bg-zinc-900+rounded-lg classes match theme.css's card rule
+    // `.bg-zinc-900.rounded-lg{position:relative}` (specificity 0,2,0), which beats
+    // Tailwind's `.fixed` (0,1,0) and would otherwise flow the menu off-screen. Inline
+    // style outranks any selector, so this wins.
+    const r = document.getElementById("host-switch").getBoundingClientRect();
+    menu.style.position = "fixed";
+    menu.style.left = Math.round(r.left) + "px";
+    menu.style.top = Math.round(r.bottom + 4) + "px";
+    fetchFleet();   // refresh dots on each open
+  }
   menu.classList.toggle("hidden", !willShow);
-  if (willShow) fetchFleet();   // refresh dots on each open
 }
 document.getElementById("host-switch").addEventListener("click", (e) => { e.stopPropagation(); hostMenu(); });
 document.addEventListener("click", (e) => { if (!e.target.closest("#host-switch,#host-menu")) hostMenu(false); });

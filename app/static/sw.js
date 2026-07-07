@@ -4,8 +4,10 @@
 // arrives cookie-less (JWT cookie is SameSite=Strict), so we intercept it here
 // and re-issue the form as a same-origin fetch to /share/api — where the cookie
 // attaches — then answer with an instant confirmation page. Strict stays Strict.
-const CACHE = "deck-v4";
-const SHELL = ["/static/app.js", "/static/manifest.webmanifest"];
+const CACHE = "deck-v7";
+// app.js is version-queried so a stale copy can't be served from cache: bump ?v= in
+// deck.html (always fetched fresh) and here in lockstep to force a clean re-fetch.
+const SHELL = ["/static/app.js?v=7", "/static/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

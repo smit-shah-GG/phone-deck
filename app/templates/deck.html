@@ -75,13 +75,10 @@
 <body class="bg-black text-zinc-100 h-screen overflow-hidden select-none">
   <!-- persistent status strip -->
   <header class="flex items-center gap-2 px-3 h-12 bg-zinc-950 border-b border-zinc-800 text-sm">
-    <!-- wordmark = current bird + fleet host-switcher (tap -> pick a bird -> navigate to its own origin) -->
-    <div class="relative shrink-0">
-      <button id="host-switch" class="font-bold tracking-widest text-emerald-500 flex items-center gap-1">
-        <span id="host-name">—</span><span class="text-[8px] opacity-50">▼</span>
-      </button>
-      <div id="host-menu" class="hidden absolute left-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[11rem]"></div>
-    </div>
+    <!-- wordmark = current bird + fleet host-switcher; the menu lives at body level (below) to escape header stacking/overflow -->
+    <button id="host-switch" class="font-bold tracking-widest text-emerald-500 flex items-center gap-1 shrink-0">
+      <span id="host-name">—</span><span class="text-[8px] opacity-50">▼</span>
+    </button>
     <!-- swipeable telemetry: flex-1 + min-w-0 lets it shrink so the action cluster never gets shoved off -->
     <div id="st-telemetry" class="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto whitespace-nowrap">
       <span id="st-gpu" class="text-zinc-400">GPU —</span>
@@ -334,6 +331,9 @@
     </section>
   </main>
 
+  <!-- host-switcher menu: body-level + fixed + high z so no header/ancestor stacking or overflow can bury or clip it -->
+  <div id="host-menu" class="hidden fixed z-[60] bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[11rem]"></div>
+
   <!-- Ambient Cogitator: enters after idle, exits on any touch (back to exact tab) -->
   <div id="cog" class="hidden">
     <div id="cog-drift">
@@ -355,6 +355,6 @@
       <div id="cog-liturgy">++ cogitator vigil unbroken ++</div>
     </div>
   </div>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=7"></script>
 </body>
 </html>
