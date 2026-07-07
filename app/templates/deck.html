@@ -75,8 +75,13 @@
 <body class="bg-black text-zinc-100 h-screen overflow-hidden select-none">
   <!-- persistent status strip -->
   <header class="flex items-center gap-2 px-3 h-12 bg-zinc-950 border-b border-zinc-800 text-sm">
-    <!-- wordmark = fixed left anchor -->
-    <span class="font-bold tracking-widest text-emerald-500 shrink-0">LIGHTNING</span>
+    <!-- wordmark = current bird + fleet host-switcher (tap -> pick a bird -> navigate to its own origin) -->
+    <div class="relative shrink-0">
+      <button id="host-switch" class="font-bold tracking-widest text-emerald-500 flex items-center gap-1">
+        <span id="host-name">—</span><span class="text-[8px] opacity-50">▼</span>
+      </button>
+      <div id="host-menu" class="hidden absolute left-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[11rem]"></div>
+    </div>
     <!-- swipeable telemetry: flex-1 + min-w-0 lets it shrink so the action cluster never gets shoved off -->
     <div id="st-telemetry" class="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto whitespace-nowrap">
       <span id="st-gpu" class="text-zinc-400">GPU —</span>
@@ -320,6 +325,7 @@
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="modes">modes.json</button>
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="context">context.json</button>
         <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="voice">voice.json</button>
+        <button class="cfg-pick bg-zinc-800 rounded px-3 py-1 text-sm" data-cfg="fleet">fleet.json</button>
         <span id="cfg-status" class="text-xs flex-1"></span>
         <button id="cfg-save" class="bg-emerald-600 rounded px-4 py-1 text-sm font-medium">Save</button>
       </div>

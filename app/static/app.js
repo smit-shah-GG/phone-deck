@@ -1133,6 +1133,51 @@ setInterval(() => {
 document.getElementById("st-clock").addEventListener("click", cogShow);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") cogLast = Date.now(); });
 
+// ---- fleet host switcher (the wordmark) ----
+let fleetHosts = [];
+const _hostKey = (u) => { try { return new URL(u).hostname.split(".")[0]; } catch (_) { return ""; } };
+const _selfKey = () => location.hostname.split(".")[0] || "deck";  // "you are here" from our own origin
+async function fetchFleet() {
+  try { const r = await fetch("/fleet"); fleetHosts = r.ok ? await r.json() : []; }
+  catch (_) { fleetHosts = []; }
+  renderHost();
+}
+function renderHost() {
+  const self = _selfKey();
+  const here = fleetHosts.find((h) => _hostKey(h.url) === self);
+  document.getElementById("host-name").textContent = (here ? here.name : self).toUpperCase();
+  const menu = document.getElementById("host-menu");
+  if (!fleetHosts.length) {
+    menu.innerHTML = '<div class="px-3 py-2 text-xs text-zinc-500 whitespace-nowrap">no fleet.json</div>';
+    return;
+  }
+  menu.innerHTML = fleetHosts.map((h) => {
+    const isHere = _hostKey(h.url) === self;
+    // green=online, grey=known-offline, amber=unknown (tailscale down / not in view)
+    const dot = h.online === true ? "bg-emerald-500" : (h.online === false ? "bg-zinc-600" : "bg-amber-500");
+    return `<button class="host-row w-full text-left flex items-center gap-2 px-3 py-2 text-sm
+        ${isHere ? "text-emerald-400" : "text-zinc-200 hover:bg-zinc-800"}"
+        data-url="${h.url}" data-here="${isHere ? 1 : 0}">
+        <span class="w-2 h-2 rounded-full shrink-0 ${dot}"></span>
+        <span class="flex-1 truncate">${(h.label || h.name).replace(/</g, "&lt;")}</span>
+        ${isHere ? '<span class="text-[9px] tracking-widest text-emerald-500/70">HERE</span>' : ""}
+      </button>`;
+  }).join("");
+  menu.querySelectorAll(".host-row").forEach((b) => (b.onclick = () => {
+    if (b.dataset.here === "1") { hostMenu(false); return; }   // already on this bird
+    location.href = b.dataset.url;                              // navigate: its own origin/cookie/WS
+  }));
+}
+function hostMenu(show) {
+  const menu = document.getElementById("host-menu");
+  const willShow = show === undefined ? menu.classList.contains("hidden") : show;
+  menu.classList.toggle("hidden", !willShow);
+  if (willShow) fetchFleet();   // refresh dots on each open
+}
+document.getElementById("host-switch").addEventListener("click", (e) => { e.stopPropagation(); hostMenu(); });
+document.addEventListener("click", (e) => { if (!e.target.closest("#host-switch,#host-menu")) hostMenu(false); });
+fetchFleet();   // populate the wordmark on load
+
 connect();
 connectInput();
 fetchBrightness();

@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, grab, hid, hypr, modes, share, sysinfo, telemetry, theme, voice
+from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, fleet, grab, hid, hypr, modes, share, sysinfo, telemetry, theme, voice
 
 BASE = Path(__file__).parent
 app = FastAPI(title="phone-deck")
@@ -159,6 +159,13 @@ async def theme_set(payload: dict, _=Depends(auth.require_auth)):
 async def history(_=Depends(auth.require_auth)):
     # Cogitator backfill: the last ~90 min of 2s telemetry samples.
     return JSONResponse(list(_history))
+
+
+@app.get("/fleet")
+async def fleet_status(_=Depends(auth.require_auth)):
+    # Header host-switcher: the roster + live per-host reachability from THIS box's
+    # own tailscale view (no cross-origin call). Empty if no fleet.json.
+    return JSONResponse(await fleet.status())
 
 
 @app.get("/login", response_class=HTMLResponse)

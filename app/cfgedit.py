@@ -16,6 +16,7 @@ EDITABLE = {
     "modes": config.CONFIG_DIR / "modes.json",
     "context": config.CONFIG_DIR / "context.json",
     "voice": config.CONFIG_DIR / "voice.json",
+    "fleet": config.CONFIG_DIR / "fleet.json",
 }
 
 
