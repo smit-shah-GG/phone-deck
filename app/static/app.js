@@ -1025,6 +1025,33 @@ function cogDraw() {
   });
 }
 
+// Decorative phosphor scope in the reserved #cog-socket-wave slot. Not a real level
+// meter (the idle phone can't reach the rig's live audio cheaply) — it comes alive when
+// the rig is Playing and eases to a calm idle ripple when it isn't. Honest eye-candy.
+let cogWaveAmp = 0.06;
+function cogWave(ts) {
+  const cv = document.getElementById("cog-wave-cv");
+  if (!cv) return;
+  const ctx = cv.getContext("2d"), dpr = devicePixelRatio || 1, box = cv.getBoundingClientRect();
+  if (cv.width !== Math.round(box.width * dpr)) { cv.width = Math.round(box.width * dpr); cv.height = Math.round(box.height * dpr); }
+  const W = cv.width, H = cv.height, C = cogColors();
+  ctx.clearRect(0, 0, W, H);
+  const playing = lastState.audio?.now_playing?.status === "Playing";
+  cogWaveAmp += ((playing ? 1 : 0.06) - cogWaveAmp) * 0.05;   // ease between live / idle
+  const t = COG_RM ? 0.5 : ts / 1000, mid = H / 2, amp = H * 0.34 * cogWaveAmp;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += dpr) {
+    const u = x / W;
+    const y = mid + amp * (0.6 * Math.sin(u * 22 - t * 6) + 0.3 * Math.sin(u * 41 + t * 3.3) + 0.1 * Math.sin(u * 90 - t * 11));
+    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.lineWidth = dpr; ctx.strokeStyle = `rgb(${C.P})`;
+  ctx.shadowColor = `rgb(${C.P})`; ctx.shadowBlur = 4 * dpr;
+  ctx.globalAlpha = 0.3 + 0.6 * cogWaveAmp;
+  ctx.stroke();
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+}
+
 function cogChrome() {                     // clock/date/uptime/now-playing refresh
   const d = new Date(), hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
   document.getElementById("cog-clock").innerHTML =
@@ -1091,6 +1118,7 @@ function cogShow() {
     if (ts - last >= 33) {
       last = ts;
       cogDraw();
+      cogWave(ts);
       if (!COG_RM) {
         const t = ts / 1000;   // Lissajous pixel drift (AMOLED)
         document.getElementById("cog-drift").style.transform =
@@ -1177,16 +1205,19 @@ function renderOutposts() {
   if (!el) return;
   if (!fleetHosts.length) { el.textContent = "· V3 · OUTPOSTS ·"; return; }
   const self = _selfKey();
-  const dot = (o) => o === true ? "#33ff9a" : (o === false ? "rgba(255,255,255,.22)" : "#ffb000");
+  const dot = (o) => o === true ? "#4dffa4" : (o === false ? "#4a5560" : "#ffb000");
   el.innerHTML =
-    '<div style="opacity:.4;margin-bottom:6px">· OUTPOSTS ·</div>' +
-    '<div style="display:flex;flex-direction:column;gap:4px;font-size:10px;letter-spacing:.1em;text-align:left">' +
+    '<div style="opacity:.5;margin-bottom:7px;font-size:9px">· OUTPOSTS ·</div>' +
+    '<div style="display:flex;flex-direction:column;gap:5px;font-size:12px;letter-spacing:.1em;text-align:left">' +
     fleetHosts.map((h) => {
       const here = _hostKey(h.url) === self;
-      return `<div style="display:flex;align-items:center;gap:6px;${here ? "color:var(--p-primary)" : "opacity:.5"}">`
-        + `<span style="color:${dot(h.online)};font-size:7px;line-height:1">●</span>`
+      // whole-line brightness tracks reachability so "who's up" reads at a glance —
+      // the dim 7px dot got missed on-device. here=full, online=bright, offline=dim.
+      const op = here ? 1 : (h.online === true ? 0.9 : 0.32);
+      return `<div style="display:flex;align-items:center;gap:8px;color:var(--p-primary);opacity:${op}">`
+        + `<span style="color:${dot(h.online)};font-size:11px;line-height:1">●</span>`
         + `<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(h.name || "").toUpperCase().replace(/</g, "&lt;")}</span>`
-        + (here ? '<span style="opacity:.55;font-size:7px">HERE</span>' : "")
+        + (here ? '<span style="opacity:.75;font-size:8px;letter-spacing:.2em">HERE</span>' : "")
         + "</div>";
     }).join("") +
     "</div>";
