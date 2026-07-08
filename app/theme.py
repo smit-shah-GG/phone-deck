@@ -147,7 +147,7 @@ body { background:var(--p-bg)!important; color:var(--p-on)!important;
 
 /* CRT overlays: vignette + drifting scanlines, non-interactive, above everything */
 body::before { content:""; position:fixed; inset:0; pointer-events:none; z-index:9998;
-  box-shadow:inset 0 0 220px 55px rgba(0,0,0,.78); }
+  box-shadow:inset 0 0 180px 30px rgba(0,0,0,.5); }
 body::after { content:""; position:fixed; inset:0; pointer-events:none; z-index:9999;
   background:repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.20) 2px 3px);
   background-size:100% 3px; animation:pscan 9s linear infinite; opacity:.5; }
@@ -213,10 +213,10 @@ input[type="range"] { accent-color:var(--p-primary); }
   border-color:color-mix(in srgb, var(--p-secondary) 55%, transparent)!important;
   color:var(--p-secondary)!important; }
 
-/* very subtle overall CRT flicker */
-main, header, nav, #ctx-strip { animation:pflick 7s steps(60) infinite; }
+/* very subtle overall CRT flicker (V3 shell elements) */
+.band, .center, .rail { animation:pflick 7s steps(60) infinite; }
 @keyframes pflick { 0%,97%,100%{ opacity:1 } 98%{ opacity:.96 } 99%{ opacity:.99 } }
-@media (prefers-reduced-motion:reduce){ main,header,nav,#ctx-strip{ animation:none; } }
+@media (prefers-reduced-motion:reduce){ .band, .center, .rail{ animation:none; } }
 
 /* ════════ V2.1 flourishes: box-drawing frames · readout labels · boot-in ════════ */
 

@@ -84,23 +84,35 @@ function setResult(id, res) {
   if (el && res) el.textContent = res.ok ? "✓ ok" : `✗ ${res.error || res.stderr || res.code || ""}`;
 }
 
-// ---- tabs ----
-document.querySelectorAll(".tab").forEach((btn) => {
-  btn.onclick = () => {
-    document.querySelectorAll(".tab").forEach((b) => {
-      const on = b === btn;
-      b.classList.toggle("bg-zinc-800", on);
-      b.classList.toggle("text-zinc-500", !on);
-    });
-    document.querySelectorAll("[data-page]").forEach((p) =>
-      p.classList.toggle("hidden", p.dataset.page !== btn.dataset.tab));
-    if (btn.dataset.tab === "modes") loadModes();
-    if (btn.dataset.tab === "workspaces") fetchBrightness();
-    if (btn.dataset.tab === "config") loadConfig(cfgCurrent);
-    if (btn.dataset.tab === "stream") populateMonitors();
-    if (btn.dataset.tab === "files") populateShotMonitors();
-  };
-});
+// ---- dock + summon (replaces the old flat tabs) ----
+// The center shows Workspaces home by default; a lit dock row fills it with that panel
+// (band + rail persist). Tap the lit row / a panel's back = home. Files/Config/System
+// live under MORE, so opening one keeps the MORE row lit.
+const PANEL_PARENT = { files: "more", config: "more", system: "more" };
+let activePanel = null;
+function openPanel(pn) {
+  document.querySelectorAll(".drow").forEach((x) => x.classList.remove("on"));
+  document.querySelectorAll(".panel").forEach((x) => x.classList.remove("show"));
+  const home = document.getElementById("home");
+  if (!pn || activePanel === pn) {          // toggle the lit row -> back to home
+    activePanel = null;
+    home.classList.remove("hide");
+    return;
+  }
+  activePanel = pn;
+  home.classList.add("hide");
+  const row = document.querySelector(`.drow[data-p="${PANEL_PARENT[pn] || pn}"]`);
+  if (row) row.classList.add("on");
+  const panel = document.getElementById("panel-" + pn);
+  if (panel) panel.classList.add("show");
+  if (pn === "modes") loadModes();
+  else if (pn === "stream") populateMonitors();
+  else if (pn === "files") populateShotMonitors();
+  else if (pn === "config") loadConfig(cfgCurrent);
+}
+document.querySelectorAll(".drow").forEach((r) => (r.onclick = () => openPanel(r.dataset.p)));
+document.querySelectorAll(".lbtn").forEach((b) => (b.onclick = () => openPanel(b.dataset.sub)));
+document.querySelectorAll(".phead .back").forEach((b) => (b.onclick = () => openPanel(b.dataset.p)));
 
 // ---- segmented controls (terminal toggles that replace native <select>) ----
 function segValue(id) {
@@ -211,6 +223,9 @@ document.querySelectorAll("[data-mute]").forEach((b) =>
   (b.onclick = () => post("/audio/mute", { target: b.dataset.mute })));
 document.querySelectorAll(".media").forEach((b) =>
   (b.onclick = () => post(`/media/${b.dataset.media}`)));
+// rail volume-mute glyph (speaker/sink mute; the Audio panel keeps the labelled mutes)
+const railMute = document.getElementById("rail-mute");
+if (railMute) railMute.onclick = () => post("/audio/mute", { target: "sink" });
 
 const volSlider = document.getElementById("vol-slider");
 if (volSlider) {
@@ -663,18 +678,36 @@ async function loadModes() {
 })();
 
 // ---- live state rendering ----
+// Band telemetry readouts. Each readout self-colors by its worst signal: amber at
+// temp >=80 or util >=90, red at temp >=88. Tap the clock for full gauges (cogitator).
 function renderStatus(s) {
   const g = s.telemetry?.gpu, c = s.telemetry?.cpu, a = s.audio;
-  if (g) document.getElementById("st-gpu").textContent =
-    `GPU ${g.util|0}% · ${(g.vram_used/1024).toFixed(1)}/${(g.vram_total/1024).toFixed(0)}G · ${g.temp|0}°`;
-  if (c) document.getElementById("st-cpu").textContent =
-    `CPU ${c.util|0}%${c.temp ? " · " + (c.temp|0) + "°" : ""} · ${c.mem_used}/${c.mem_total}G`;
-  if (a) document.getElementById("st-aud").textContent =
+  const heat = (temp, util) =>
+    (temp >= 88) ? "alert" : (temp >= 80 || util >= 90) ? "warn" : "";
+  const paint = (el, cls) => {
+    if (!el) return;
+    el.classList.toggle("warn", cls === "warn");
+    el.classList.toggle("alert", cls === "alert");
+  };
+  const gpuEl = document.getElementById("st-gpu");
+  if (g && gpuEl) {
+    gpuEl.textContent =
+      `GPU ${g.util | 0}% · ${(g.vram_used / 1024).toFixed(1)}/${(g.vram_total / 1024).toFixed(0)}G · ${g.temp | 0}°`;
+    paint(gpuEl, heat(g.temp ?? 0, g.util ?? 0));
+  }
+  const cpuEl = document.getElementById("st-cpu");
+  if (c && cpuEl) {
+    cpuEl.textContent =
+      `CPU ${c.util | 0}%${c.temp ? " · " + (c.temp | 0) + "°" : ""} · ${c.mem_used}/${c.mem_total}G`;
+    paint(cpuEl, heat(c.temp ?? 0, c.util ?? 0));
+  }
+  const audEl = document.getElementById("st-aud");
+  if (a && audEl) audEl.textContent =
     `${a.mic_muted ? "MIC×" : "MIC"} · ${a.sink_muted ? "MUTE" : (a.volume ?? "—") + "%"}`;
 }
 
 function renderWorkspaces(s) {
-  const grid = document.querySelector('[data-page="workspaces"]');
+  const grid = document.getElementById("wsgrid");
   const mons = s.hypr?.monitors || [];
   // Column count tracks the monitor count (capped at 3), so a single-monitor laptop
   // gets a full-width card instead of one stranded in the left third of the screen.
@@ -686,23 +719,23 @@ function renderWorkspaces(s) {
     ? "repeat(auto-fit, minmax(2.75rem, 3rem))"
     : "repeat(5, minmax(0, 1fr))";
   grid.innerHTML = mons.map((m) => `
-    <div class="bg-zinc-900 rounded-xl p-3">
-      <div class="text-xs text-zinc-500 mb-2 truncate">${m.name} · ${m.model || ""} · ${m.refresh}Hz
+    <div class="bg-zinc-900 rounded-xl p-3 flex flex-col gap-2 min-h-0 overflow-hidden">
+      <div class="text-xs text-zinc-500 truncate shrink-0">${m.name} · ${m.model || ""} · ${m.refresh}Hz
         ${m.focused ? '<span class="text-emerald-500">●</span>' : ""}</div>
-      <div class="grid gap-1.5 content-start" style="grid-template-columns:${wsCols}">
+      <div class="grid gap-1.5 content-start shrink-0" style="grid-template-columns:${wsCols}">
         ${Array.from({length: WS_COUNT}, (_, i) => i + 1).map((n) => `
           <button class="ws aspect-square rounded-lg text-sm font-medium
             ${m.active_ws === n ? "bg-emerald-600" : "bg-zinc-800"}"
             data-ws="${n}">${n}</button>`).join("")}
       </div>
-      <div class="mt-2 flex items-center gap-2">
+      <div class="flex items-center gap-2 shrink-0">
         <button class="dpms text-xs px-2 py-1 rounded ${m.dpms ? "bg-zinc-800" : "bg-red-800"}"
-          data-mon="${m.name}" data-on="${m.dpms ? 1 : 0}" title="DPMS">${m.dpms ? "⏻ on" : "off"}</button>
+          data-mon="${m.name}" data-on="${m.dpms ? 1 : 0}" title="DPMS">${m.dpms ? "● on" : "○ off"}</button>
         <span class="text-xs text-emerald-500">BRT</span>
         <input type="range" min="0" max="100" value="${brightness[m.name] ?? 50}"
           class="bri flex-1" data-mon="${m.name}" ${m.name in brightness ? "" : "disabled"}>
       </div>
-      <div class="mt-2 space-y-1">
+      <div class="space-y-1 overflow-auto flex-1 min-h-0">
         ${(s.hypr?.windows || []).filter((w) => w.monitor === m.name).map((w) => `
           <button class="win w-full text-left text-xs rounded px-2 py-1 truncate
             ${w.focused ? "bg-emerald-700" : "bg-zinc-800"}" data-addr="${w.address}"
@@ -739,18 +772,27 @@ function renderAudio(s) {
   document.getElementById("now-playing").textContent =
     np && np.title ? `${np.status === "Playing" ? "▶" : "‖"} ${np.title}` : "—";
   const art = document.getElementById("art");
+  const npEmpty = document.getElementById("np-empty");
+  const showEmpty = () => npEmpty && npEmpty.classList.remove("hidden");
+  const hideEmpty = () => npEmpty && npEmpty.classList.add("hidden");
   if (np && np.art_key) {
     if (art.dataset.k !== np.art_key) {       // only refetch when the track changes
       art.dataset.k = np.art_key;
-      art.onerror = () => art.classList.add("hidden");
-      art.onload = () => art.classList.remove("hidden");
+      art.onerror = () => { art.classList.add("hidden"); showEmpty(); };
+      art.onload = () => { art.classList.remove("hidden"); hideEmpty(); };
       art.src = `/media/art?k=${np.art_key}`;
     }
   } else {
     art.classList.add("hidden");
     art.removeAttribute("src");
     art.dataset.k = "";
+    showEmpty();
   }
+  // rail transport glyph + mute reflect live audio state
+  const pp = document.getElementById("rail-pp");
+  if (pp) pp.textContent = np && np.status === "Playing" ? "❚❚" : "▶";
+  const rm = document.getElementById("rail-mute");
+  if (rm) rm.classList.toggle("muted", !!a.sink_muted);
   document.getElementById("sink-list").innerHTML = (a.sinks || []).map((d) =>
     `<div class="sink dev w-full truncate cursor-pointer text-sm ${d.active ? "on" : ""}" data-id="${d.id}"><span class="dot"></span>${d.name}</div>`).join("");
   document.querySelectorAll(".sink").forEach((b) =>
@@ -777,80 +819,51 @@ function renderSystem(s) {
     (b.onclick = () => b.disabled || post("/sys/kill", { pid: Number(b.dataset.pid) })));
 }
 
-// ---- context strip (surface-only: call · media · in-app controls) ----
+// ---- common context-aware controls (context.json apps + call), below the home columns ----
+// Media transport moved to the rail; this strip carries the call quick-mute and the
+// config-driven per-app buttons (keyed by focused/persist window class). Empty -> hidden.
 let ctxConfig = { apps: {}, call_apps: [] };
 async function loadContextConfig() {
   try { ctxConfig = await (await fetch("/context")).json(); } catch (_) {}
 }
 function ctxLoose(a, b) { return a === b || a.includes(b) || b.includes(a); }
-function ctxBtn(label, handler, extra) {
-  const b = document.createElement("button");
-  b.className = "shrink-0 rounded px-2 py-0.5 text-xs " + (extra || "bg-zinc-800");
-  b.textContent = label; b.onclick = handler;
-  return b;
-}
-function ctxGroup(first) {
-  const g = document.createElement("div");
-  g.className = "flex items-center gap-1 shrink-0 " + (first
-    ? "sticky left-0 z-10 bg-zinc-900/95 pr-1"
-    : "ml-1 pl-1 border-l border-zinc-700/50");
-  return g;
-}
-function ctxLabel(text, cls) {
-  const s = document.createElement("span");
-  s.className = "px-1 text-xs " + (cls || "text-zinc-500");
-  s.textContent = text;
-  return s;
-}
 
 function renderContext(s) {
-  const strip = document.getElementById("ctx-strip");
+  const strip = document.getElementById("ctx-home");
   if (!strip) return;
-  strip.innerHTML = "";
+  const esc = (x) => String(x).replace(/</g, "&lt;");
   const wins = s.hypr?.windows || [];
-  const focusedCls = s.hypr?.active_window?.class || "";
-  let first = true;
+  const focusedCls = (wins.find((w) => w.focused) || {}).cls || s.hypr?.active_window?.class || "";
+  let html = "";
 
-  // 1) Call — pinned hard-left, never scrolls off
-  const calls = (ctxConfig.call_apps || []);
+  // call — quick-mute + jump to the call window
+  const calls = ctxConfig.call_apps || [];
   const rec = (s.audio?.recording || []).filter((r) => calls.some((a) => ctxLoose(r, a)));
   if (rec.length) {
-    const g = ctxGroup(first); first = false;
-    g.appendChild(ctxLabel("CALL", "text-emerald-400"));
-    g.appendChild(ctxBtn(s.audio?.mic_muted ? "UNMUTE" : "MUTE",
-      () => post("/audio/mute", { target: "mic" }),
-      s.audio?.mic_muted ? "bg-red-800" : "bg-zinc-800"));
-    const callWin = wins.find((w) => rec.some((r) => w.cls && ctxLoose(w.cls, r)));
-    if (callWin) g.appendChild(ctxBtn("↪ call", () => post("/hypr/focus", { address: callWin.address })));
-    strip.appendChild(g);
+    const muted = s.audio?.mic_muted;
+    const callWin = wins.find((w) => w.cls && rec.some((r) => ctxLoose(w.cls, r)));
+    html += `<div class="ctxrow"><span class="ctxlab">Call</span>`
+      + `<button class="ctxbtn${muted ? " muted" : ""}" data-ctx="callmute">${muted ? "UNMUTE" : "MUTE"}</button>`
+      + (callWin ? `<button class="ctxbtn" data-ctx="callfocus" data-addr="${callWin.address}">↪ call</button>` : "")
+      + `</div>`;
   }
 
-  // 2) Media / now-playing — generic MPRIS, surfaced strip-wide
-  const np = s.audio?.now_playing;
-  if (np && np.title) {
-    const g = ctxGroup(first); first = false;
-    const t = ctxLabel((np.status === "Playing" ? "▶ " : "‖ ") + np.title, "text-zinc-400");
-    t.classList.add("max-w-[10rem]", "truncate");
-    g.appendChild(t);
-    g.appendChild(ctxBtn("|◀", () => post("/media/previous")));
-    g.appendChild(ctxBtn("▶", () => post("/media/play-pause")));
-    g.appendChild(ctxBtn("▶|", () => post("/media/next")));
-    strip.appendChild(g);
-  }
-
-  // 3) In-app controls — config-driven, keyed by window class, via sendshortcut
+  // per-app controls — config-driven, keyed by window class (focused, or persist-present)
   for (const [cls, app] of Object.entries(ctxConfig.apps || {})) {
-    const present = app.show === "persist"
-      ? wins.some((w) => w.cls === cls)
-      : focusedCls === cls;
+    const present = app.show === "persist" ? wins.some((w) => w.cls === cls) : focusedCls === cls;
     if (!present) continue;
-    const g = ctxGroup(first); first = false;
-    g.appendChild(ctxLabel(app.label || cls));
-    (app.controls || []).forEach((c) =>
-      g.appendChild(ctxBtn(c.label || c.key,
-        () => post("/context/key", { cls, key: c.key, mods: c.mods || "" }))));
-    strip.appendChild(g);
+    const btns = (app.controls || []).map((c) =>
+      `<button class="ctxbtn" data-ctx="key" data-cls="${esc(cls)}" data-key="${esc(c.key)}" data-mods="${esc(c.mods || "")}">${esc(c.label || c.key)}</button>`).join("");
+    html += `<div class="ctxrow"><span class="ctxlab">${esc(app.label || cls)}</span>${btns}</div>`;
   }
+
+  strip.innerHTML = html;
+  strip.querySelectorAll('[data-ctx="callmute"]').forEach((b) =>
+    (b.onclick = () => post("/audio/mute", { target: "mic" })));
+  strip.querySelectorAll('[data-ctx="callfocus"]').forEach((b) =>
+    (b.onclick = () => post("/hypr/focus", { address: b.dataset.addr })));
+  strip.querySelectorAll('[data-ctx="key"]').forEach((b) =>
+    (b.onclick = () => post("/context/key", { cls: b.dataset.cls, key: b.dataset.key, mods: b.dataset.mods })));
 }
 
 function render(s) {
