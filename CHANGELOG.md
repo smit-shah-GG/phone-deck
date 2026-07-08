@@ -3,6 +3,43 @@
 All notable changes to phone-deck. This project loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and [SemVer](https://semver.org/).
 
+## [3.0.0] — 2026-07-09
+
+The V3 cycle: a multi-host **Fleet Console**, a ground-up **UI redesign** (the cockpit), and
+sharper **friday** answers. The backend, endpoints, and WebSocket state model are unchanged —
+this is an interface + fleet release.
+
+### Added — Fleet Console
+- **Host switcher** — the wordmark is now a fleet dropdown; hop between rigs (lightning, raptor,
+  blackbird) by navigating to each host's own origin, with live online dots (green online / grey
+  offline / amber unknown). Cross-host reads are intentionally *not* proxied — each host serves
+  itself.
+- **Cogitator fleet board** — the ambient screen's reserved sockets now show the fleet as
+  "outposts" (reachability at a glance) plus a decorative waveform scope tied to playback.
+- **Reduced-host behavior** — hosts without a discrete GPU, DDC brightness, or multiple monitors
+  degrade cleanly: backlight-brightness fallback, single-monitor workspace layout, and honest
+  absence of GPU telemetry. Deployed to the raptor laptop (blackbird still gated).
+
+### Changed — UI redesign (the cockpit)
+- Ground-up restructure of the information architecture. The three stacked persistent strips
+  (telemetry + context + nine tabs) that made everything physically tiny on the phone are gone.
+  New shell: a thin instrument **band** (host + telemetry readouts that self-color amber/red when
+  hot) · a full-height **Workspaces home** of per-monitor columns with a common context-controls
+  strip below · a right **rail** — volume + transport + a **dock** that summons panels into a
+  single swappable center (Files/Config/System stow under an overhead "More"). Visuals are
+  unchanged: every component and the full theme are reused verbatim; only the layout is
+  re-engineered. Built in a parallel worktree and cut over via a served-path symlink.
+- Type: Chakra Petch structural labels + IBM Plex Mono data; softened CRT vignette.
+
+### Changed — friday
+- Feeds the full open-window list (not just the focused app); runs at a configurable context
+  window (default 16384), with `num_keep` set so lowering `num_ctx` can't gut the injected state.
+
+### Fixed
+- Fleet host-switcher dropdown positioning — a `theme.css` card rule (`.bg-zinc-900.rounded-lg
+  {position:relative}`, specificity 0,2,0) was overriding Tailwind's `.fixed`; pinned with an
+  inline `position:fixed`.
+
 ## [2.5.0] — 2026-07-07
 
 First tagged release — the full arc from the original control deck through the V2 feature

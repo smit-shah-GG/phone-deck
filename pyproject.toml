@@ -1,6 +1,6 @@
 [project]
 name = "phone-deck"
-version = "2.5.0"
+version = "3.0.0"
 description = "Self-hosted control deck and remote desktop for a Linux/Hyprland workstation, served as a PWA"
 requires-python = ">=3.11"
 dependencies = [
