@@ -223,17 +223,17 @@ document.querySelectorAll("[data-mute]").forEach((b) =>
   (b.onclick = () => post("/audio/mute", { target: b.dataset.mute })));
 document.querySelectorAll(".media").forEach((b) =>
   (b.onclick = () => post(`/media/${b.dataset.media}`)));
-// rail volume-mute glyph (speaker/sink mute; the Audio panel keeps the labelled mutes)
-const railMute = document.getElementById("rail-mute");
-if (railMute) railMute.onclick = () => post("/audio/mute", { target: "sink" });
-
-const volSlider = document.getElementById("vol-slider");
-if (volSlider) {
-  const send = () => post("/audio/volume", { pct: Number(volSlider.value) });
-  volSlider.addEventListener("pointerdown", () => (volDragging = true));
-  volSlider.addEventListener("input", () => (document.getElementById("vol-val").textContent = volSlider.value));
-  volSlider.addEventListener("change", () => { send(); volDragging = false; });
-}
+// volume: multiple sliders stay in sync (one in the rail, a redundant one in the Audio panel).
+// Every mute button/glyph (incl. the rail one) is already wired by the [data-mute] handler above.
+function setVolText(v) { document.querySelectorAll(".vol-val").forEach((el) => (el.textContent = v)); }
+document.querySelectorAll(".vol-slider").forEach((sl) => {
+  sl.addEventListener("pointerdown", () => (volDragging = true));
+  sl.addEventListener("input", () => {
+    setVolText(sl.value);
+    document.querySelectorAll(".vol-slider").forEach((o) => { if (o !== sl) o.value = sl.value; });
+  });
+  sl.addEventListener("change", () => { post("/audio/volume", { pct: Number(sl.value) }); volDragging = false; });
+});
 
 // ---- system: lock + kill ----
 document.querySelectorAll("[data-sys]").forEach((b) => {
@@ -763,11 +763,12 @@ function renderAudio(s) {
   const a = s.audio;
   if (!a) return;
   if (!volDragging && a.volume != null) {
-    volSlider.value = a.volume;
-    document.getElementById("vol-val").textContent = a.volume;
+    document.querySelectorAll(".vol-slider").forEach((sl) => (sl.value = a.volume));
+    document.querySelectorAll(".vol-val").forEach((el) => (el.textContent = a.volume));
   }
-  document.getElementById("mic-btn").classList.toggle("bg-red-800", a.mic_muted);
-  document.getElementById("spk-btn").classList.toggle("bg-red-800", a.sink_muted);
+  // mutes go red — toggles every element carrying data-mute (big buttons + rail/panel glyphs)
+  document.querySelectorAll('[data-mute="mic"]').forEach((b) => b.classList.toggle("muted", !!a.mic_muted));
+  document.querySelectorAll('[data-mute="sink"]').forEach((b) => b.classList.toggle("muted", !!a.sink_muted));
   const np = a.now_playing;
   document.getElementById("now-playing").textContent =
     np && np.title ? `${np.status === "Playing" ? "▶" : "‖"} ${np.title}` : "—";
@@ -788,17 +789,15 @@ function renderAudio(s) {
     art.dataset.k = "";
     showEmpty();
   }
-  // rail transport glyph + mute reflect live audio state
-  const pp = document.getElementById("rail-pp");
-  if (pp) pp.textContent = np && np.status === "Playing" ? "❚❚" : "▶";
-  const rm = document.getElementById("rail-mute");
-  if (rm) rm.classList.toggle("muted", !!a.sink_muted);
+  // transport play/pause glyph reflects state on every copy (rail + Audio panel)
+  const ppGlyph = np && np.status === "Playing" ? "❚❚" : "▶";
+  document.querySelectorAll(".pp-btn").forEach((b) => (b.textContent = ppGlyph));
   document.getElementById("sink-list").innerHTML = (a.sinks || []).map((d) =>
-    `<div class="sink dev w-full truncate cursor-pointer text-sm ${d.active ? "on" : ""}" data-id="${d.id}"><span class="dot"></span>${d.name}</div>`).join("");
+    `<div class="sink dev w-full cursor-pointer text-sm ${d.active ? "on" : ""}" data-id="${d.id}"><span class="dot"></span><span class="flex-1 min-w-0 truncate">${d.name}</span></div>`).join("");
   document.querySelectorAll(".sink").forEach((b) =>
     (b.onclick = () => post("/audio/sink", { id: Number(b.dataset.id) })));
   document.getElementById("source-list").innerHTML = (a.sources || []).map((d) =>
-    `<div class="source dev w-full truncate cursor-pointer text-sm ${d.active ? "on" : ""}" data-id="${d.id}"><span class="dot"></span>${d.name}</div>`).join("");
+    `<div class="source dev w-full cursor-pointer text-sm ${d.active ? "on" : ""}" data-id="${d.id}"><span class="dot"></span><span class="flex-1 min-w-0 truncate">${d.name}</span></div>`).join("");
   document.querySelectorAll(".source").forEach((b) =>
     (b.onclick = () => post("/audio/source", { id: Number(b.dataset.id) })));
 }

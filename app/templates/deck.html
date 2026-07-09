@@ -84,8 +84,8 @@
 
     .app { height:100%; display:flex; flex-direction:column; }
 
-    /* strip theme.css's button frame off shell chrome (wordmark, band icons, transport) */
-    #host-switch, .band .btn-i, .trans .media {
+    /* strip theme.css's button frame off shell chrome (wordmark, band icons) */
+    #host-switch, .band .btn-i {
       border:none !important; background:none !important; }
     #host-switch { padding:0 !important; }
 
@@ -109,7 +109,7 @@
     /* BODY */
     .body { flex:1; display:flex; min-height:0; }
     .center { flex:1; min-width:0; min-height:0; display:flex; padding:8px; overflow:hidden; }
-    .rail { width:138px; flex:none; display:flex; flex-direction:column; gap:7px; padding:8px;
+    .rail { width:20%; min-width:150px; flex:none; display:flex; flex-direction:column; gap:8px; padding:8px;
       border-left:1px solid var(--sh-line);
       background:color-mix(in srgb, var(--p-bg) 70%, var(--p-surface)); }
 
@@ -127,14 +127,30 @@
     .ctxbtn { font-size:11px; padding:3px 9px; color:var(--p-on); background:var(--p-low); cursor:pointer; }
     .ctxbtn.muted { border-color:#ff5252 !important; color:#ff5252 !important; }
 
-    /* RAIL controls */
-    .vol { display:flex; align-items:center; gap:7px; padding:2px 0; }
-    .vol .m { color:var(--p-on-var); font-size:13px; cursor:pointer; flex:none; }
-    .vol .m.muted { color:#ff5252; }
-    .vol input[type=range] { flex:1; min-width:0; }
-    .vpct { font-size:9px; color:var(--p-on-var); width:26px; text-align:right; flex:none; }
-    .trans { display:flex; justify-content:space-around; align-items:center; color:var(--p-on); font-size:15px; }
-    .trans .media { cursor:pointer; padding:2px 6px; color:var(--p-on); }
+    /* RAIL/AUDIO controls — sized by urgency: volume + transport are pinch-hit targets, so
+       they get real framed buttons + a fat slider (dock stays lean = deliberate taps).
+       Same classes are reused in the Audio panel as a redundant copy. */
+    .vol { display:flex; align-items:center; gap:8px; }
+    .vol .m { flex:none; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+      font-size:15px; cursor:pointer; color:var(--p-on); background:var(--p-high);
+      border:1px solid var(--sh-line); border-radius:8px; }
+    .vpct { font-size:10px; color:var(--p-on-var); width:28px; text-align:right; flex:none; }
+    .vol input[type=range] { flex:1; min-width:0; height:26px; cursor:pointer;
+      -webkit-appearance:none; appearance:none; background:transparent; }
+    .vol input[type=range]::-webkit-slider-runnable-track { height:8px; border-radius:5px;
+      background:var(--p-high); border:1px solid var(--sh-line); }
+    .vol input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; margin-top:-8px;
+      border-radius:50%; background:var(--p-primary);
+      box-shadow:0 0 8px color-mix(in srgb, var(--p-primary) 55%, transparent); }
+    .trans { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+    .trans .media { display:flex; align-items:center; justify-content:center; cursor:pointer;
+      padding:12px 0; font-size:18px; color:var(--p-on); background:var(--p-high); border-radius:8px; }
+    .trans .media.pp-btn { color:var(--p-primary);
+      box-shadow:inset 0 0 12px color-mix(in srgb, var(--p-primary) 12%, transparent); }
+    .trans .media:active { box-shadow:0 0 8px color-mix(in srgb, var(--p-primary) 40%, transparent); }
+    /* mute buttons/glyphs turn red when muted — !important beats theme.css's .bg-zinc-800 repaint */
+    [data-mute].muted { background:color-mix(in srgb, #ff5252 22%, #000) !important;
+      border-color:#ff5252 !important; color:#ff5252 !important; }
     .rail .rule { height:1px; background:var(--sh-line); margin:2px 0; }
     .dock { display:flex; flex-direction:column; gap:5px; flex:1; }
     .drow { display:flex; align-items:center; gap:8px; padding:8px 10px; cursor:pointer;
@@ -193,25 +209,39 @@
         <!-- Audio — mutes + now-playing + devices (volume/transport moved to the rail) -->
         <section class="panel" id="panel-audio">
           <div class="phead"><h2>Audio</h2></div>
-          <div class="flex gap-4 flex-1 min-h-0">
-            <div class="flex flex-col gap-4 flex-1 min-h-0">
+          <div class="grid gap-4 flex-1 min-h-0" style="grid-template-columns:30% minmax(0,1fr)">
+            <!-- left column: mutes + now-playing hero + a redundant copy of volume/transport (30%) -->
+            <div class="flex flex-col gap-3 min-h-0 min-w-0">
               <div class="flex gap-2 shrink-0">
                 <button id="mic-btn" class="flex-1 bg-zinc-800 rounded-lg py-4" data-mute="mic">Mic</button>
                 <button id="spk-btn" class="flex-1 bg-zinc-800 rounded-lg py-4" data-mute="sink">Speaker</button>
               </div>
-              <div class="bg-zinc-900 rounded-lg p-4 flex-1 min-h-0 flex flex-col items-center justify-center gap-4">
-                <img id="art" alt="" class="rounded object-cover bg-zinc-800 hidden" style="width:min(200px,42vh);height:min(200px,42vh)">
-                <div id="np-empty" class="flex items-center justify-center text-zinc-600 text-xs tracking-[.25em]"
-                  style="width:min(200px,42vh);height:min(200px,42vh);border:1px solid var(--p-outline);border-radius:6px">NO SIGNAL</div>
-                <p id="now-playing" class="text-sm text-zinc-300 text-center w-full truncate">—</p>
+              <div class="bg-zinc-900 rounded-lg p-3 flex-1 min-h-0 flex flex-col items-center justify-center gap-3">
+                <img id="art" alt="" class="rounded object-cover bg-zinc-800 hidden" style="width:min(160px,32vh);height:min(160px,32vh)">
+                <div id="np-empty" class="flex items-center justify-center text-zinc-600 text-[10px] tracking-[.25em]"
+                  style="width:min(160px,32vh);height:min(160px,32vh);border:1px solid var(--p-outline);border-radius:6px">NO SIGNAL</div>
+                <p id="now-playing" class="text-xs text-zinc-300 text-center w-full truncate">—</p>
+              </div>
+              <div class="shrink-0 flex flex-col gap-2">
+                <div class="vol">
+                  <span class="m" data-mute="sink" title="mute speaker">◼</span>
+                  <input class="vol-slider" type="range" min="0" max="150" value="0">
+                  <span class="vpct vol-val">—</span>
+                </div>
+                <div class="trans">
+                  <button class="media" data-media="previous" title="previous">◁◁</button>
+                  <button class="media pp-btn" data-media="play-pause" title="play/pause">❚❚</button>
+                  <button class="media" data-media="next" title="next">▷▷</button>
+                </div>
               </div>
             </div>
-            <div class="flex flex-col gap-3 flex-1 min-h-0 overflow-auto">
-              <div>
+            <!-- right column: device lists (70%); min-w-0 so long names ellipsis instead of clipping -->
+            <div class="flex flex-col gap-3 min-h-0 min-w-0 overflow-auto">
+              <div class="min-w-0">
                 <p class="text-xs uppercase tracking-wider text-zinc-500 mb-1">Output device</p>
                 <div id="sink-list" class="space-y-1"></div>
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs uppercase tracking-wider text-zinc-500 mb-1">Input device</p>
                 <div id="source-list" class="space-y-1"></div>
               </div>
@@ -429,13 +459,13 @@
       <!-- RAIL: volume · transport · dock -->
       <div class="rail">
         <div class="vol">
-          <span class="m" id="rail-mute" title="mute speaker">◼</span>
-          <input id="vol-slider" type="range" min="0" max="150" value="0">
-          <span class="vpct" id="vol-val">—</span>
+          <span class="m" data-mute="sink" title="mute speaker">◼</span>
+          <input class="vol-slider" type="range" min="0" max="150" value="0">
+          <span class="vpct vol-val">—</span>
         </div>
         <div class="trans">
           <button class="media" data-media="previous" title="previous">◁◁</button>
-          <button class="media" data-media="play-pause" id="rail-pp" title="play/pause">❚❚</button>
+          <button class="media pp-btn" data-media="play-pause" title="play/pause">❚❚</button>
           <button class="media" data-media="next" title="next">▷▷</button>
         </div>
         <div class="rule"></div>
@@ -475,6 +505,6 @@
       <div id="cog-liturgy">++ cogitator vigil unbroken ++</div>
     </div>
   </div>
-  <script src="/static/app.js?v=14"></script>
+  <script src="/static/app.js?v=15"></script>
 </body>
 </html>
