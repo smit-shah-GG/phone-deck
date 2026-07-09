@@ -3,6 +3,22 @@
 All notable changes to phone-deck. This project loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and [SemVer](https://semver.org/).
 
+## [3.0.1] — 2026-07-10
+
+### Changed
+- **Audio ergonomics** (from real use): the control rail is now a **percentage width (20%)**
+  instead of a fixed 138px that collapsed to a sliver on wider phones — volume and transport
+  are enlarged into framed, easy-to-hit targets. The Audio panel's mutes + now-playing column
+  is locked to **30%** (device lists get the freed 70% and truncate cleanly), with a redundant
+  volume/transport copy under the hero.
+
+### Fixed
+- Mic/Speaker mutes (and the rail/panel mute glyphs) now turn **red when muted** — a `theme.css`
+  `!important` background repaint had been clobbering the state.
+
+### Added
+- `.github/FUNDING.yml` — the GitHub Sponsors button on the repo.
+
 ## [3.0.0] — 2026-07-09
 
 The V3 cycle: a multi-host **Fleet Console**, a ground-up **UI redesign** (the cockpit), and
