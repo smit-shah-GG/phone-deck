@@ -314,6 +314,16 @@
           </div>
         </section>
 
+        <!-- Site-19: present the Level-5 NFC card to cross into the SCP environment -->
+        <section class="panel" id="panel-site19">
+          <div class="phead"><h2>Site-19</h2><span class="sub">level 5 clearance</span></div>
+          <div class="bg-zinc-900 rounded-lg p-4 space-y-4 flex-1 min-h-0 overflow-auto">
+            <button id="s19-scan" class="w-full rounded-xl py-8 text-xl font-semibold tracking-[0.2em] bg-emerald-700">◈ PRESENT CLEARANCE</button>
+            <p id="s19-status" class="text-center text-sm text-zinc-400">Tap the button, then present the card to the phone.</p>
+            <pre id="s19-output" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs whitespace-pre-wrap overflow-auto max-h-48"></pre>
+          </div>
+        </section>
+
         <!-- Remote input (mouse left · keyboard right) -->
         <section class="panel" id="panel-remote">
           <div class="phead"><h2>Remote</h2></div>
@@ -474,6 +484,7 @@
           <div class="drow" data-p="stream"><span class="t">›</span> Stream</div>
           <div class="drow" data-p="voice"><span class="t">›</span> Voice</div>
           <div class="drow" data-p="modes"><span class="t">›</span> Modes</div>
+          <div class="drow" data-p="site19"><span class="t">›</span> Site-19</div>
           <div class="drow" data-p="remote"><span class="t">›</span> Remote</div>
           <div class="drow more" data-p="more"><span class="t">›</span> More …</div>
         </div>
@@ -505,6 +516,6 @@
       <div id="cog-liturgy">++ cogitator vigil unbroken ++</div>
     </div>
   </div>
-  <script src="/static/app.js?v=15"></script>
+  <script src="/static/app.js?v=17"></script>
 </body>
 </html>

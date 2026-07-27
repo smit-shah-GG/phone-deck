@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, fleet, grab, hid, hypr, modes, share, sysinfo, telemetry, theme, voice
+from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, fleet, grab, hid, hypr, modes, share, site19, sysinfo, telemetry, theme, voice
 
 BASE = Path(__file__).parent
 app = FastAPI(title="phone-deck")
@@ -308,6 +308,12 @@ async def modes_list(_=Depends(auth.require_auth)):
 @app.post("/modes/run")
 async def modes_run(payload: dict, _=Depends(auth.require_auth)):
     return JSONResponse(await modes.run(payload.get("id", "")))
+
+
+# ---- Site-19 (SCP crossing) ------------------------------------------------
+@app.post("/site19/{action}")
+async def site19_trigger(action: str, payload: dict, _=Depends(auth.require_auth)):
+    return JSONResponse(await site19.run(action, payload.get("uid")))
 
 
 # ---- context strip ---------------------------------------------------------

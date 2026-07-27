@@ -235,6 +235,37 @@ document.querySelectorAll(".vol-slider").forEach((sl) => {
   sl.addEventListener("change", () => { post("/audio/volume", { pct: Number(sl.value) }); volDragging = false; });
 });
 
+// ---- Site-19: present the Level-5 NFC card to cross into the SCP environment ----
+// The card UID is matched server-side (from ~/.config/phone-deck/site19.json); we
+// just relay whatever the phone scanned and let the deck decide. No UID lives here.
+const s19Scan = document.getElementById("s19-scan");
+if (s19Scan) {
+  const s19Say = (m) => { const e = document.getElementById("s19-status"); if (e) e.textContent = m; };
+  let s19Reader = null;
+  s19Scan.onclick = async () => {
+    if (!("NDEFReader" in window)) { s19Say("Web NFC unsupported here — use Chrome/Brave on Android."); return; }
+    if (s19Reader) { s19Say("Scanner armed — present the card."); return; }
+    try {
+      s19Reader = new NDEFReader();
+      await s19Reader.scan();
+      s19Say("Awaiting clearance — present the card…");
+      s19Reader.onreadingerror = () => s19Say("Read error — present the card again.");
+      s19Reader.onreading = async (e) => {
+        const uid = (e.serialNumber || "").toLowerCase();
+        s19Say("Reading clearance — crossing…");
+        const res = await post("/site19/toggle", { uid });
+        const out = document.getElementById("s19-output");
+        if (out) out.textContent = (res && res.output) ? res.output : JSON.stringify(res || {});
+        if (res && res.denied) { s19Say(`Access denied — unrecognized tag (${uid || "no UID"}).`); return; }
+        s19Say(res && res.ok ? "◈ Crossing complete — tap the card again to withdraw." : "✗ Controller error — see output.");
+      };
+    } catch (err) {
+      s19Reader = null;
+      s19Say("NFC blocked: " + (err && err.message ? err.message : String(err)));
+    }
+  };
+}
+
 // ---- system: lock + kill ----
 document.querySelectorAll("[data-sys]").forEach((b) => {
   if (b.dataset.sys === "lock") b.onclick = () => post("/sys/lock");
