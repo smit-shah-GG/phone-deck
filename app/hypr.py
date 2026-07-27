@@ -9,27 +9,47 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 _ENV_HIS = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
 
 
 def _his() -> str:
-    """Resolve the *current* Hyprland instance signature — the newest socket dir under
-    $XDG_RUNTIME_DIR/hypr. This auto-heals after a Hyprland restart (the env HIS the
-    service started with goes stale), so the deck keeps working without a restart.
+    """Resolve the *current* Hyprland instance signature. Prefer the signature the service
+    started with if its event socket is still LIVE; otherwise probe the socket dirs
+    newest-first and return the first whose `.socket2.sock` actually accepts a connection.
+
+    A dead Hyprland leaves its socket *files* behind, so "newest dir that has a
+    .socket2.sock" can point at a corpse — which is exactly how the deck ends up talking to
+    a dead instance and returning empty state (blank Workspaces). Probing for a live
+    listener is what makes the auto-heal actually heal, even when the alive instance isn't
+    the newest by mtime.
     """
     base = f"{RUNTIME}/hypr"
+
+    def _alive(sig: str) -> bool:
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(0.2)
+            s.connect(os.path.join(base, sig, ".socket2.sock"))
+            s.close()
+            return True
+        except OSError:
+            return False
+
+    if _ENV_HIS and _alive(_ENV_HIS):
+        return _ENV_HIS
     try:
-        cands = [
-            (os.path.getmtime(os.path.join(base, name)), name)
-            for name in os.listdir(base)
-            if os.path.exists(os.path.join(base, name, ".socket2.sock"))
-        ]
-        if cands:
-            return max(cands)[1]
+        dirs = sorted(
+            ((os.path.getmtime(os.path.join(base, name)), name) for name in os.listdir(base)),
+            reverse=True,
+        )
     except OSError:
-        pass
+        return _ENV_HIS
+    for _, name in dirs:
+        if _alive(name):
+            return name
     return _ENV_HIS
 
 
