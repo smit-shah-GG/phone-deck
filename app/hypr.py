@@ -81,22 +81,68 @@ async def _hyprctl_json(*args: str):
     return json.loads(out)
 
 
-async def _hyprctl_dispatch(*args: str):
-    proc = await asyncio.create_subprocess_exec(
-        "hyprctl", "dispatch", *args, env=_env(),
-        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-    )
-    await _communicate(proc)
-    return proc.returncode == 0
+# Hyprland 0.56 moved `hyprctl dispatch` and `hyprctl keyword` to a Lua parser: the
+# classic string forms (`dispatch workspace 8`, `keyword workspace "…"`) error there
+# — dispatch with a Lua parse error, keyword with "can't work with non-legacy parsers.
+# Use eval." Queries (`hyprctl -j …`) were untouched. We detect which the running
+# compositor speaks on first use and cache it, so the deck works across Hyprland
+# versions and self-heals across an upgrade. dispatch → hl.dispatch(hl.dsp.*); a
+# `workspace` keyword → hl.workspace_rule(...); both issued via `hyprctl eval`.
+_USE_LUA: bool | None = None
 
 
-async def _hyprctl_keyword(*args: str) -> bool:
+def _lua_str(s: str) -> str:
+    """Render a Python string as a double-quoted Lua string literal."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+async def _run(*argv: str) -> tuple[int, bytes]:
     proc = await asyncio.create_subprocess_exec(
-        "hyprctl", "keyword", *args, env=_env(),
-        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        "hyprctl", *argv, env=_env(),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
-    await _communicate(proc)
-    return proc.returncode == 0
+    out, _ = await _communicate(proc)
+    return (proc.returncode if proc.returncode is not None else 1), (out or b"")
+
+
+def _ok(rc: int, out: bytes) -> bool:
+    # Success is rc 0 with none of the known failure tells. `keyword` on a Lua
+    # compositor returns rc 0 but says "non-legacy parsers / Use eval", so an
+    # rc check alone would misread it as success — hence the phrase guards.
+    o = out.lower()
+    return rc == 0 and b"error" not in o and b"legacy" not in o and b"use eval" not in o
+
+
+async def _dispatch(classic: list[str], lua: str) -> bool:
+    """Issue one dispatch via whichever protocol the compositor speaks. `classic` is
+    the old ["dispatcher", "args", …] form; `lua` is the 0.56+ hl.dsp.* expression.
+    First use tries classic, falls back to Lua on failure, and caches the choice."""
+    global _USE_LUA
+    if _USE_LUA is None:
+        if _ok(*await _run("dispatch", *classic)):
+            _USE_LUA = False
+            return True
+        _USE_LUA = True
+    if _USE_LUA:
+        return _ok(*await _run("dispatch", lua))
+    return _ok(*await _run("dispatch", *classic))
+
+
+async def _set_workspace_rule(ws: int, monitor: str, default: bool) -> bool:
+    """Bind a workspace to a monitor at runtime (the HYBRID monitor map). Classic:
+    `keyword workspace "N, monitor:M[, default:true]"`; 0.56+: hl.workspace_rule(...)."""
+    global _USE_LUA
+    val = f"{ws}, monitor:{monitor}" + (", default:true" if default else "")
+    lua = (f"hl.workspace_rule({{workspace={ws}, monitor={_lua_str(monitor)}"
+           + (", default=true" if default else "") + "})")
+    if _USE_LUA is None:
+        if _ok(*await _run("keyword", "workspace", val)):
+            _USE_LUA = False
+            return True
+        _USE_LUA = True
+    if _USE_LUA:
+        return _ok(*await _run("eval", lua))
+    return _ok(*await _run("keyword", "workspace", val))
 
 
 
@@ -138,10 +184,12 @@ async def apply_monitor_mapping(monitors: list[dict]) -> list[str]:
     for i, m in enumerate(monitors):
         for j in range(1, 6):
             ws = i * 5 + j
-            val = f"{ws}, monitor:{m['name']}" + (", default:true" if j == 1 else "")
-            await _hyprctl_keyword("workspace", val)
+            await _set_workspace_rule(ws, m["name"], default=(j == 1))
             if ws in ws_mon and ws_mon[ws] != m["name"]:   # relocate the already-misplaced
-                await _hyprctl_dispatch("moveworkspacetomonitor", str(ws), m["name"])
+                await _dispatch(
+                    ["moveworkspacetomonitor", str(ws), m["name"]],
+                    f"hl.dsp.workspace.move({{workspace={ws}, monitor={_lua_str(m['name'])}}})",
+                )
         applied.append(f"{m['name']}: ws{i * 5 + 1}-{i * 5 + 5}")
     return applied
 
@@ -197,26 +245,54 @@ async def focus_workspace(ws_id: int) -> bool:
         # Pad workspaces live on an invisible output — plain `workspace` would
         # warp focus into the void. Reel the workspace onto the monitor the user
         # is actually looking at instead (verified live 2026-07-03).
-        return await _hyprctl_dispatch("focusworkspaceoncurrentmonitor", str(int(ws_id)))
-    return await _hyprctl_dispatch("workspace", str(int(ws_id)))
+        return await _dispatch(
+            ["focusworkspaceoncurrentmonitor", str(int(ws_id))],
+            f"hl.dsp.focus({{workspace={int(ws_id)}}})",
+        )
+    return await _dispatch(
+        ["workspace", str(int(ws_id))],
+        f"hl.dsp.focus({{workspace={int(ws_id)}}})",
+    )
 
 
 async def move_window_to_workspace(ws_id: int) -> bool:
-    return await _hyprctl_dispatch("movetoworkspace", str(int(ws_id)))
+    # follows the moved window (matches classic movetoworkspace), unlike modes'
+    # silent relocation — moving your focused window here is a deliberate go-there.
+    return await _dispatch(
+        ["movetoworkspace", str(int(ws_id))],
+        f"hl.dsp.window.move({{workspace={int(ws_id)}}})",
+    )
 
 
 async def set_dpms(monitor: str, on: bool) -> bool:
-    return await _hyprctl_dispatch("dpms", "on" if on else "off", monitor)
+    """Set a monitor's DPMS to an explicit state. Classic Hyprland's `dpms on/off`
+    is explicit and idempotent; 0.56's hl.dsp.dpms *only toggles* (the on/off arg is
+    ignored), so read the current state and flip only when it differs — deterministic
+    on both, and it never blanks a screen that's already in the wanted state."""
+    mons = await _hyprctl_json("monitors") or []
+    cur = next((m.get("dpmsStatus") for m in mons if m.get("name") == monitor), None)
+    if cur is not None and bool(cur) == bool(on):
+        return True                                  # already there — no toggle
+    state = "on" if on else "off"
+    classic = ["dpms", state] + ([monitor] if monitor else [])
+    lua = f"hl.dsp.dpms({{monitor={_lua_str(monitor)}}})" if monitor else "hl.dsp.dpms({})"
+    return await _dispatch(classic, lua)
 
 
 async def focus_window(address: str) -> bool:
     if not address:
         return False
-    return await _hyprctl_dispatch("focuswindow", f"address:{address}")
+    return await _dispatch(
+        ["focuswindow", f"address:{address}"],
+        f"hl.dsp.focus({{window={_lua_str(f'address:{address}')}}})",
+    )
 
 
 async def move_cursor(x: int, y: int) -> bool:
-    return await _hyprctl_dispatch("movecursor", str(int(x)), str(int(y)))
+    return await _dispatch(
+        ["movecursor", str(int(x)), str(int(y))],
+        f"hl.dsp.cursor.move({{x={int(x)}, y={int(y)}}})",
+    )
 
 
 async def send_shortcut(cls: str, key: str, mods: str = "") -> bool:
@@ -228,7 +304,11 @@ async def send_shortcut(cls: str, key: str, mods: str = "") -> bool:
     """
     if not cls or not key:
         return False
-    return await _hyprctl_dispatch("sendshortcut", f"{mods},{key},class:{cls}")
+    return await _dispatch(
+        ["sendshortcut", f"{mods},{key},class:{cls}"],
+        (f"hl.dsp.send_shortcut({{mods={_lua_str(mods)}, key={_lua_str(key)}, "
+         f"window={_lua_str(f'class:{cls}')}}})"),
+    )
 
 
 async def watch_events(on_change):
