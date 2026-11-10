@@ -114,40 +114,47 @@
     #st-stream.lost { color:var(--p-secondary); border-color:var(--p-secondary); }
 
     /* ═══ STREAM FOCUS MODE (#80) ═══ the stage goes fixed over the whole app (band,
-       rail and controls covered) and the 16:9 video, height-limited on a 20:9 phone,
-       leaves letterbox bars at the sides: the gamepad strips live there, so they cost
-       the picture nothing. Strips are touch-only; a mouse gets just the exit. */
+       rail and controls covered). On a 20:9 phone the 16:9 video is height-limited, so
+       ~150px of width is spare: on touch screens the video is anchored left and that
+       whole width becomes ONE gamepad column on the right (user, 2026-11-10): ✕/STRM,
+       the stick, L|R side by side, and everything below them is scroll. It costs the
+       picture nothing. A mouse keeps the full-width video and gets just the ✕ row. */
     #focus-enter, #stream-stage .fstrip, #stream-stage .pad { display:none; }
     body:not(.stream-focus) #stream-stage:has(#stream-video-el:not(.hidden)) #focus-enter { display:block; }
     #focus-enter { position:absolute; top:6px; right:6px; z-index:3; font-size:18px; line-height:1;
       padding:6px 8px; border-radius:6px; background:rgba(0,0,0,.55); color:var(--p-primary);
       border:1px solid color-mix(in srgb, var(--p-primary) 40%, transparent); }
     body.stream-focus #stream-stage { position:fixed; inset:0; z-index:60; border:0; border-radius:0;
-      --strip:max(68px, calc((100vw - 100dvh * 16 / 9) / 2)); }
-    body.stream-focus #stream-stage .fstrip { position:absolute; top:0; bottom:0; width:var(--strip);
-      z-index:2; flex-direction:column; align-items:stretch; gap:8px; padding:8px 6px; }
-    body.stream-focus #focus-left { display:flex; left:0; }
-    #focus-right { right:0; justify-content:center; align-items:center !important; }
+      --strip:max(136px, calc(100vw - 100dvh * 16 / 9)); }
+    body.stream-focus #focus-strip { display:flex; position:absolute; top:0; right:0; z-index:2;
+      flex-direction:column; align-items:stretch; gap:8px; padding:8px 6px; }
+    .frow { display:flex; gap:6px; align-items:center; }
+    .frow > * { flex:1; }
     .fbtn { border-radius:8px; padding:10px 0; font-size:15px; letter-spacing:.1em; background:#000;
       color:var(--p-primary); border:1px solid color-mix(in srgb, var(--p-primary) 45%, transparent);
       touch-action:none; user-select:none; -webkit-user-select:none; }
-    .fbtn.big { flex:0 0 78px; }   /* half its first size (user) */ .fbtn.on { background:color-mix(in srgb, var(--p-primary) 35%, #000); }
-    #focus-exit { padding:6px 0; font-size:13px; color:var(--p-on-var); }
+    .fbtn.on { background:color-mix(in srgb, var(--p-primary) 35%, #000); }
+    #focus-exit { padding:5px 0; font-size:13px; color:var(--p-on-var); }
     #focus-status { text-align:center; font-size:9px; letter-spacing:.2em;
       color:color-mix(in srgb, var(--p-on-var) 50%, transparent); }
     #focus-status.live { color:var(--p-primary); } #focus-status.lost { color:var(--p-secondary); }
+    #pad-l, #pad-r { padding:8px 0; font-size:13px; }
     #pad-scroll { flex:1; align-items:center; justify-content:center; border-radius:8px; font-size:18px;
       color:color-mix(in srgb, var(--p-primary) 55%, transparent); touch-action:none;
       border:1px dashed color-mix(in srgb, var(--p-primary) 35%, transparent); }
-    #joy { position:relative; width:min(calc(var(--strip) - 10px), 140px); aspect-ratio:1; border-radius:50%;
-      touch-action:none; border:1px solid color-mix(in srgb, var(--p-primary) 45%, transparent);
+    #joy { position:relative; align-self:center; width:min(calc(var(--strip) - 30px), 120px); aspect-ratio:1;
+      border-radius:50%; touch-action:none; border:1px solid color-mix(in srgb, var(--p-primary) 45%, transparent);
       background:radial-gradient(circle, color-mix(in srgb, var(--p-primary) 10%, #000), #000 70%); }
     #joy-knob { position:absolute; left:30%; top:30%; width:40%; height:40%; border-radius:50%;
       background:color-mix(in srgb, var(--p-primary) 45%, #000); border:1px solid var(--p-primary);
       pointer-events:none; }
     @media (pointer:coarse) {
-      body.stream-focus #focus-right { display:flex; }
+      body.stream-focus #focus-strip { bottom:0; width:var(--strip); }
       body.stream-focus #stream-stage .pad { display:flex; }
+      body.stream-focus #stream-video-el { width:calc(100% - var(--strip)); }   /* anchor left (a <video> won't stretch to left+right: replaced element) */
+    }
+    @media not (pointer:coarse) {
+      body.stream-focus #focus-strip { width:110px; padding:6px; background:rgba(0,0,0,.55); border-radius:0 0 0 8px; }
     }
     /* crosshair at the server-reported cursor: leads the ~100-300ms video lag */
     #stream-xhair { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; z-index:2;
@@ -340,16 +347,18 @@
               <video id="stream-video-el" autoplay playsinline muted class="absolute inset-0 w-full h-full object-contain hidden touch-none cursor-crosshair"></video>
               <div id="stream-xhair" class="hidden"></div>
               <button id="focus-enter" title="focus: maximise the video">⛶</button>
-              <!-- focus mode = a gamepad split around the video: buttons left, stick right -->
-              <div id="focus-left" class="fstrip">
-                <button id="focus-exit" class="fbtn" title="leave focus mode">✕</button>
-                <span id="focus-status">STRM</span>
-                <button id="pad-l" class="fbtn pad big" title="left button — hold to drag">L</button>
-                <button id="pad-r" class="fbtn pad" title="right button">R</button>
-                <div id="pad-scroll" class="pad" title="scroll">⇕</div>
-              </div>
-              <div id="focus-right" class="fstrip">
+              <!-- focus mode = one gamepad column right of the video: stick, L|R, then scroll -->
+              <div id="focus-strip" class="fstrip">
+                <div class="frow">
+                  <button id="focus-exit" class="fbtn" title="leave focus mode">✕</button>
+                  <span id="focus-status">STRM</span>
+                </div>
                 <div id="joy" class="pad"><div id="joy-knob"></div></div>
+                <div class="frow pad">
+                  <button id="pad-l" class="fbtn" title="left button">L</button>
+                  <button id="pad-r" class="fbtn" title="right button">R</button>
+                </div>
+                <div id="pad-scroll" class="pad" title="scroll">⇕</div>
               </div>
             </div>
           </div>
@@ -590,6 +599,6 @@
       <div id="cog-liturgy">++ cogitator vigil unbroken ++</div>
     </div>
   </div>
-  <script src="/static/app.js?v=22"></script>
+  <script src="/static/app.js?v=23"></script>
 </body>
 </html>

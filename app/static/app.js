@@ -556,9 +556,9 @@ function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null
 })();
 
 // ---- stream focus mode + gamepad cursor (#80) ----
-// The stage goes fixed over the whole app; on touch screens the letterbox bars beside
-// the 16:9 video become a gamepad: L / R / scroll on the left thumb, a stick on the
-// right. The stick is relative motion that the server confines to the streamed screen
+// The stage goes fixed over the whole app; on touch screens the video is anchored left
+// and the spare width beside the 16:9 picture becomes one gamepad column: stick, L|R,
+// and a scroll pad below. The stick is relative motion that the server confines to the streamed screen
 // and answers with the cursor's position, so the crosshair can lead the laggy video.
 (function initFocus() {
   const stage = document.getElementById("stream-stage");
