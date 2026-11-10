@@ -585,10 +585,11 @@ function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null
     xh.classList.remove("hidden");
   };
 
-  // stick: 8% deadzone, speed ∝ deflection² (nudge = pixel-fine, full push = half the
-  // screen's width per second), sent at ~30 Hz while held. Same px speed on both axes.
+  // stick: 8% deadzone, then LINEAR speed in deflection (user preferred it to the
+  // accelerating curve), full push = a quarter of the screen's width per second;
+  // sent at ~30 Hz while held. Same px speed on both axes.
   const joy = document.getElementById("joy"), knob = document.getElementById("joy-knob");
-  const DEAD = 0.08, SPEED = 0.5;   // full push = half a screen width/s (user: 1.0 was too much)
+  const DEAD = 0.08, SPEED = 0.25;  // screen widths/s at full push (user tuned: 1.0 -> 0.5 -> 0.25)
   let jx = 0, jy = 0, jid = null, jt = null, jlast = 0;
   function joyAt(e) {
     const r = joy.getBoundingClientRect(), R = r.width / 2;
@@ -603,7 +604,7 @@ function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null
     jlast = now;
     const d = Math.hypot(jx, jy);
     if (d < DEAD) return;
-    const k = ((d - DEAD) / (1 - DEAD)) ** 2 / d * SPEED * dt;
+    const k = (d - DEAD) / (1 - DEAD) / d * SPEED * dt;
     const aspect = vid.videoWidth && vid.videoHeight ? vid.videoWidth / vid.videoHeight : 16 / 9;
     sendInput({ t: "jmove", monitor: segValue("stream-monitor"), dfx: jx * k, dfy: jy * k * aspect });
   }
