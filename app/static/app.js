@@ -281,6 +281,10 @@ function connectInput() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   inputSock = new WebSocket(`${proto}://${location.host}/ws/input`);
   inputSock.onclose = () => setTimeout(connectInput, 2000);
+  inputSock.onmessage = (e) => {                     // gamepad cursor position (focus mode)
+    const m = JSON.parse(e.data);
+    if (m.t === "cur" && window.onCursor) window.onCursor(m);
+  };
 }
 function sendInput(o) {
   if (inputSock && inputSock.readyState === 1) inputSock.send(JSON.stringify(o));
@@ -378,6 +382,8 @@ function streamState(text, on, kind) {   // kind: "live" (default when on) | "lo
     band.classList.remove("live", "lost");
     if (on) band.classList.add(kind || "live");
     band.title = "stream · " + text;
+    const fs = document.getElementById("focus-status");   // focus mode's strip mirrors it
+    if (fs) { fs.className = band.className; fs.title = band.title; }
   }
 }
 function populateMonitors() {
@@ -405,6 +411,7 @@ function renderStream(s) {
 }
 async function streamStop() {
   streamOutSeen = null;
+  if (window.streamFocus) window.streamFocus(false);
   if (streamPc) { streamPc.close(); streamPc = null; }
   if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
   document.getElementById("stream-audio").srcObject = null;
@@ -516,7 +523,12 @@ function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null
     const fy = (ev.clientY - r.top - (r.height - dh) / 2) / dh;
     return (fx < 0 || fx > 1 || fy < 0 || fy > 1) ? null : { fx, fy };
   }
-  function vsend(t, ev) { const p = vfrac(ev); if (p) sendInput({ t, monitor: vmon(), fx: p.fx, fy: p.fy }); }
+  function vsend(t, ev) {
+    const p = vfrac(ev);
+    if (!p) return;
+    sendInput({ t, monitor: vmon(), fx: p.fx, fy: p.fy });
+    if (window.onCursor) window.onCursor(p);            // a tap moves the crosshair too
+  }
   let vDown = false, vMoved = false, vDrag = false, vStart = null, vTimer = null, vLast = 0;
   vid.addEventListener("pointerdown", (ev) => {
     if (!vid.srcObject || videoCaptured) return;   // capture mode uses relative input instead
@@ -541,6 +553,99 @@ function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null
   }
   vid.addEventListener("pointerup", vEnd);
   vid.addEventListener("pointercancel", vEnd);
+})();
+
+// ---- stream focus mode + gamepad cursor (#80) ----
+// The stage goes fixed over the whole app; on touch screens the letterbox bars beside
+// the 16:9 video become a gamepad: L / R / scroll on the left thumb, a stick on the
+// right. The stick is relative motion that the server confines to the streamed screen
+// and answers with the cursor's position, so the crosshair can lead the laggy video.
+(function initFocus() {
+  const stage = document.getElementById("stream-stage");
+  if (!stage) return;
+  const vid = document.getElementById("stream-video-el");
+  const xh = document.getElementById("stream-xhair");
+  const touch = matchMedia("(pointer:coarse)").matches;
+  const focused = () => document.body.classList.contains("stream-focus");
+  window.streamFocus = (on) => {
+    document.body.classList.toggle("stream-focus", on);
+    if (!on) { joyStop(); xh.classList.add("hidden"); return; }
+    if (touch) sendInput({ t: "jwhere", monitor: segValue("stream-monitor") });
+  };
+  document.getElementById("focus-enter").onclick = () => window.streamFocus(true);
+  document.getElementById("focus-exit").onclick = () => window.streamFocus(false);
+
+  window.onCursor = (m) => {                    // fractions of the streamed screen -> stage px
+    if (!focused() || !touch || !vid.videoWidth) return;
+    const r = vid.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    const sc = Math.min(r.width / vid.videoWidth, r.height / vid.videoHeight);
+    const dw = vid.videoWidth * sc, dh = vid.videoHeight * sc;
+    xh.style.left = (r.left - sr.left + (r.width - dw) / 2 + m.fx * dw) + "px";
+    xh.style.top = (r.top - sr.top + (r.height - dh) / 2 + m.fy * dh) + "px";
+    xh.classList.remove("hidden");
+  };
+
+  // stick: 8% deadzone, speed ∝ deflection² (nudge = pixel-fine, full push crosses the
+  // screen's width in ~1 s), sent at ~30 Hz while held. Same px speed on both axes.
+  const joy = document.getElementById("joy"), knob = document.getElementById("joy-knob");
+  const DEAD = 0.08, SPEED = 1.0;
+  let jx = 0, jy = 0, jid = null, jt = null, jlast = 0;
+  function joyAt(e) {
+    const r = joy.getBoundingClientRect(), R = r.width / 2;
+    let x = (e.clientX - r.left - R) / R, y = (e.clientY - r.top - R) / R;
+    const d = Math.hypot(x, y);
+    if (d > 1) { x /= d; y /= d; }
+    jx = x; jy = y;
+    knob.style.transform = `translate(${x * R * 0.6}px, ${y * R * 0.6}px)`;
+  }
+  function joyTick() {
+    const now = performance.now(), dt = Math.min(0.1, (now - jlast) / 1000);
+    jlast = now;
+    const d = Math.hypot(jx, jy);
+    if (d < DEAD) return;
+    const k = ((d - DEAD) / (1 - DEAD)) ** 2 / d * SPEED * dt;
+    const aspect = vid.videoWidth && vid.videoHeight ? vid.videoWidth / vid.videoHeight : 16 / 9;
+    sendInput({ t: "jmove", monitor: segValue("stream-monitor"), dfx: jx * k, dfy: jy * k * aspect });
+  }
+  function joyStop() {
+    jx = jy = 0; jid = null; knob.style.transform = "";
+    clearInterval(jt); jt = null;
+  }
+  joy.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); joy.setPointerCapture(e.pointerId);
+    jid = e.pointerId; joyAt(e); jlast = performance.now();
+    if (!jt) jt = setInterval(joyTick, 33);
+  });
+  joy.addEventListener("pointermove", (e) => { if (e.pointerId === jid) joyAt(e); });
+  ["pointerup", "pointercancel"].forEach((ev) =>
+    joy.addEventListener(ev, (e) => { if (e.pointerId === jid) joyStop(); }));
+
+  // L / R press on touch-down and release on touch-up: a tap is a click, holding L
+  // while steering is a drag.
+  const pad = (id, b) => {
+    const el = document.getElementById(id);
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); el.setPointerCapture(e.pointerId);
+      el.classList.add("on"); sendInput({ t: "jdown", b });
+    });
+    ["pointerup", "pointercancel"].forEach((ev) => el.addEventListener(ev, () => {
+      if (!el.classList.contains("on")) return;
+      el.classList.remove("on"); sendInput({ t: "jup", b });
+    }));
+  };
+  pad("pad-l", "left");
+  pad("pad-r", "right");
+
+  // scroll pad: one wheel step per 18px of vertical drag (same direction as the trackpad)
+  const sp = document.getElementById("pad-scroll");
+  let sy = null, acc = 0;
+  sp.addEventListener("pointerdown", (e) => { e.preventDefault(); sp.setPointerCapture(e.pointerId); sy = e.clientY; acc = 0; });
+  sp.addEventListener("pointermove", (e) => {
+    if (sy === null) return;
+    acc += e.clientY - sy; sy = e.clientY;
+    while (Math.abs(acc) >= 18) { const s = Math.sign(acc); sendInput({ t: "scroll", dy: s < 0 ? 1 : -1 }); acc -= s * 18; }
+  });
+  ["pointerup", "pointercancel"].forEach((ev) => sp.addEventListener(ev, () => { sy = null; }));
 })();
 
 // ---- capture mode: "Lock input" on Stream (laptop becomes kb+mouse+screen) ----

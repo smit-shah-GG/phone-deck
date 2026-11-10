@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, fleet, grab, hid, hypr, modes, share, site19, sysinfo, telemetry, theme, voice
+from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, fleet, grab, hid, hypr, joystick, modes, share, site19, sysinfo, telemetry, theme, voice
 
 BASE = Path(__file__).parent
 app = FastAPI(title="phone-deck")
@@ -467,6 +467,40 @@ async def _video_input(msg: dict) -> None:
         hid.button("left", True)
 
 
+_joy: dict = {"pos": None, "at": 0.0}     # server-owned gamepad cursor (logical px)
+
+
+async def _joy_input(msg: dict, ws: WebSocket) -> None:
+    """Gamepad cursor for stream focus mode (see app/joystick.py): jwhere / jmove
+    reply the cursor as fractions of the streamed screen so the phone can draw its
+    crosshair; jdown / jup press / release a mouse button where the cursor is."""
+    t = msg["t"]
+    if t in ("jdown", "jup"):
+        hid.button("right" if msg.get("b") == "right" else "left", t == "jdown")
+        return
+    vs = audio_rtc.video_status                  # confine to what is actually streamed
+    name = vs.get("output") if vs.get("state") == "live" else msg.get("monitor")
+    mon = next((m for m in _state.get("hypr", {}).get("monitors", []) if m["name"] == name), None)
+    if not mon:
+        return
+    r = joystick.rect(mon)
+    now = time.monotonic()
+    warp = False
+    if t == "jwhere" or _joy["pos"] is None or now - _joy["at"] > joystick.RESYNC_S:
+        cp = await hypr._hyprctl_json("cursorpos") or {}
+        real = (float(cp.get("x", r[0])), float(cp.get("y", r[1])))
+        _joy["pos"] = joystick.place(real, r, entering=(t == "jwhere"))
+        warp = _joy["pos"] != real
+    if t == "jmove":
+        _joy["pos"] = joystick.step(_joy["pos"], float(msg.get("dfx", 0)), float(msg.get("dfy", 0)), r)
+        warp = True
+    _joy["at"] = now
+    if warp:
+        await hypr.move_cursor(round(_joy["pos"][0]), round(_joy["pos"][1]))
+    fx, fy = joystick.frac(_joy["pos"], r)
+    await ws.send_json({"t": "cur", "fx": fx, "fy": fy})
+
+
 @app.websocket("/ws/input")
 async def ws_input(websocket: WebSocket):
     if not await auth.ws_authed(websocket):
@@ -477,8 +511,11 @@ async def ws_input(websocket: WebSocket):
         while True:
             msg = await websocket.receive_json()
             try:
-                if str(msg.get("t", "")).startswith("v"):
+                t = str(msg.get("t", ""))
+                if t.startswith("v"):
                     await _video_input(msg)
+                elif t.startswith("j"):
+                    await _joy_input(msg, websocket)
                 else:
                     hid.handle(msg)
             except Exception:  # noqa: BLE001 — a bad event must not drop the connection
