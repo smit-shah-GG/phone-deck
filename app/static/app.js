@@ -585,10 +585,10 @@ function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null
     xh.classList.remove("hidden");
   };
 
-  // stick: 8% deadzone, speed ∝ deflection² (nudge = pixel-fine, full push crosses the
-  // screen's width in ~1 s), sent at ~30 Hz while held. Same px speed on both axes.
+  // stick: 8% deadzone, speed ∝ deflection² (nudge = pixel-fine, full push = half the
+  // screen's width per second), sent at ~30 Hz while held. Same px speed on both axes.
   const joy = document.getElementById("joy"), knob = document.getElementById("joy-knob");
-  const DEAD = 0.08, SPEED = 1.0;
+  const DEAD = 0.08, SPEED = 0.5;   // full push = half a screen width/s (user: 1.0 was too much)
   let jx = 0, jy = 0, jid = null, jt = null, jlast = 0;
   function joyAt(e) {
     const r = joy.getBoundingClientRect(), R = r.width / 2;
@@ -636,14 +636,15 @@ function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null
   pad("pad-l", "left");
   pad("pad-r", "right");
 
-  // scroll pad: one wheel step per 18px of vertical drag (same direction as the trackpad)
+  // scroll pad: one wheel step per 18px of vertical drag. Finger up = wheel down, the
+  // phone's own natural direction (the user reversed the trackpad's convention here).
   const sp = document.getElementById("pad-scroll");
   let sy = null, acc = 0;
   sp.addEventListener("pointerdown", (e) => { e.preventDefault(); sp.setPointerCapture(e.pointerId); sy = e.clientY; acc = 0; });
   sp.addEventListener("pointermove", (e) => {
     if (sy === null) return;
     acc += e.clientY - sy; sy = e.clientY;
-    while (Math.abs(acc) >= 18) { const s = Math.sign(acc); sendInput({ t: "scroll", dy: s < 0 ? 1 : -1 }); acc -= s * 18; }
+    while (Math.abs(acc) >= 18) { const s = Math.sign(acc); sendInput({ t: "scroll", dy: s < 0 ? -1 : 1 }); acc -= s * 18; }
   });
   ["pointerup", "pointercancel"].forEach((ev) => sp.addEventListener(ev, () => { sy = null; }));
 })();
