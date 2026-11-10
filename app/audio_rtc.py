@@ -17,11 +17,16 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import time
 from fractions import Fraction
+from pathlib import Path
 
 import av
+import numpy
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.mediastreams import MediaStreamError, MediaStreamTrack
+
+from . import hypr
 
 # Raise the VP8 congestion-control ceiling: the stock 1.5 Mbps cap smears text,
 # and a pad is a MONITOR — text is its whole life. The estimator still adapts
@@ -198,50 +203,220 @@ def wf_cmd(monitor: str, scale: str | None, fps: int) -> list[str]:
     return cmd
 
 
+HEADLESS_OUTPUT = "HEADLESS-KEEPALIVE"   # headless.sh's virtual output (its only screen)
+REACQUIRE_EVERY_S = 1.0
+LOST_CARD = Path(__file__).parent / "static" / "stream-lost.png"
+
+
+def pick_capture_output(preferred: list[str | None], monitors: list[dict]) -> str | None:
+    """Where to (re)start screen capture once the captured output has gone away.
+
+    Order: the first `preferred` name still present (the output the user picked,
+    then the one last captured) → HEADLESS-KEEPALIVE (headless mode's only screen)
+    → the focused monitor → any monitor. None only if Hyprland lists no outputs.
+    Pure, for testing. Disabled outputs don't appear in `hyprctl monitors`, so a
+    screen headless mode switched off counts as gone.
+    """
+    names = [m["name"] for m in monitors if m.get("name")]
+    for p in preferred:
+        if p and p in names:
+            return p
+    if HEADLESS_OUTPUT in names:
+        return HEADLESS_OUTPUT
+    for m in monitors:
+        if m.get("focused") and m.get("name"):
+            return m["name"]
+    return names[0] if names else None
+
+
+def _next_frame(gen):
+    """next() for the executor; None once the capture has ended.
+
+    StopIteration must not escape: asyncio can't carry it into a Future and turns
+    it into a RuntimeError, which aiortc's RTP sender treats as fatal — the video
+    froze for the rest of the session (2026-11-02, headless toggle). A wf-recorder
+    dying mid-frame surfaces as a decode error instead, which means the same thing.
+    """
+    try:
+        return next(gen)
+    except StopIteration:
+        return None
+    except (av.FFmpegError, OSError, ValueError):
+        return None
+
+
+def _preset_size(scale: str | None) -> tuple[int, int]:
+    if scale:
+        w, h = scale.split(":")
+        return int(w), int(h)
+    return 1920, 1080
+
+
+def lost_card(width: int, height: int) -> av.VideoFrame:
+    """The 'video signal lost' frame at the stream's size (yuv420p, what VP8 takes).
+    Falls back to black if the asset is missing — a card beats a dead track."""
+    try:
+        with av.open(str(LOST_CARD)) as c:
+            src = next(c.decode(video=0))
+        return src.reformat(width=width, height=height, format="yuv420p")
+    except (av.FFmpegError, OSError, StopIteration):
+        black = numpy.zeros((height, width, 3), numpy.uint8)
+        return av.VideoFrame.from_ndarray(black, format="rgb24").reformat(format="yuv420p")
+
+
+# What the video capture is doing, mirrored into the deck's WS state as `stream`
+# so the phone can say "video lost" and follow a capture that moved outputs.
+# state: idle | live | lost · output: what's captured (or was, while lost) ·
+# requested: what the user picked when connecting.
+video_status: dict = {"state": "idle", "output": None, "requested": None}
+_listener = None
+
+
+def set_listener(fn) -> None:
+    """Register an async no-arg callback run whenever video_status changes."""
+    global _listener
+    _listener = fn
+
+
+def _set_video_status(**changes) -> None:
+    video_status.update(changes)
+    if _listener is not None:
+        try:
+            asyncio.get_running_loop().create_task(_listener())
+        except RuntimeError:          # no loop (tests / shutdown) — nothing to tell
+            pass
+
+
 class ScreenTrack(VideoStreamTrack):
     """Live capture of a Hyprland monitor via wf-recorder -> rawvideo pipe -> PyAV.
 
     Resolution/framerate are capped per the quality preset so WebRTC isn't asked to
     push full raw 1080p30, which collapses on the slightest network dip.
+
+    Survives its output disappearing (headless mode on/off, a hotplug): when the
+    capture ends, the track sends a 'video signal lost' card and retries every
+    second on pick_capture_output()'s choice, inside the same WebRTC track — no
+    renegotiation, so audio and input never notice.
     """
 
     def __init__(self, monitor: str, scale: str | None = "1280:720", fps: int = 24):
         super().__init__()
+        self._requested = monitor
         self._monitor = monitor
         self._scale = scale
         self._fps = fps
         self._proc: subprocess.Popen | None = None
         self._gen = None
+        self._stopped = False
+        self._lost = False
+        self._next_try = 0.0
+        self._size: tuple[int, int] | None = None   # last real frame's (w, h)
+        self._card: av.VideoFrame | None = None
 
-    def _ensure(self):
-        if self._proc is None:
-            self._proc = subprocess.Popen(
-                wf_cmd(self._monitor, self._scale, self._fps),
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            self._gen = av.open(self._proc.stdout, format="nut").decode(video=0)
+    def _open(self, monitor: str):
+        """Start wf-recorder on `monitor` and return its frame generator, or None if
+        it won't start (output gone). Runs in the executor: av.open blocks until the
+        stream header arrives, which must never stall the event loop."""
+        self._kill()
+        proc = subprocess.Popen(wf_cmd(monitor, self._scale, self._fps),
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self._proc = proc
+        if self._stopped:              # stop() raced us: don't leave a capture squatting
+            self._kill()
+            return None
+        try:
+            return av.open(proc.stdout, format="nut").decode(video=0)
+        except (av.FFmpegError, OSError, ValueError):
+            self._kill()
+            return None
+
+    def _capture_lost(self) -> None:
+        self._kill()
+        self._gen = None
+        self._lost = True
+        self._next_try = 0.0           # first retry on the very next frame tick
+        print(f"stream: video capture of {self._monitor} ended — reacquiring", flush=True)
+        _set_video_status(state="lost", output=self._monitor)
+
+    async def _reacquire(self, loop):
+        now = time.monotonic()
+        if now < self._next_try:
+            return None
+        self._next_try = now + REACQUIRE_EVERY_S
+        target = pick_capture_output([self._requested, self._monitor],
+                                     await hypr._hyprctl_json("monitors") or [])
+        if target is None:
+            return None
+        gen = await loop.run_in_executor(None, self._open, target)
+        frame = await loop.run_in_executor(None, _next_frame, gen) if gen else None
+        if frame is None:
+            self._kill()
+            return None
+        self._gen, self._monitor, self._lost = gen, target, False
+        print(f"stream: video reacquired on {target}", flush=True)
+        _set_video_status(state="live", output=target)
+        return frame
+
+    def _lost_frame(self) -> av.VideoFrame:
+        w, h = self._size or _preset_size(self._scale)
+        if self._card is None or (self._card.width, self._card.height) != (w, h):
+            self._card = lost_card(w, h)
+        return self._card
 
     async def recv(self):
-        self._ensure()
         pts, time_base = await self.next_timestamp()
-        frame = await asyncio.get_running_loop().run_in_executor(None, next, self._gen)
+        loop = asyncio.get_running_loop()
+        frame = None
+        if self._lost:
+            frame = await self._reacquire(loop)
+        else:
+            if self._gen is None:
+                self._gen = await loop.run_in_executor(None, self._open, self._monitor)
+            if self._gen is not None:
+                frame = await loop.run_in_executor(None, _next_frame, self._gen)
+            if frame is None and not self._stopped:
+                self._capture_lost()
+        if frame is None:
+            frame = self._lost_frame()
+        else:
+            self._size = (frame.width, frame.height)
         frame.pts = pts
         frame.time_base = time_base
         return frame
 
-    def stop(self):
-        super().stop()
-        if self._proc is not None and self._proc.poll() is None:
+    def _kill(self) -> None:
+        proc = self._proc
+        if proc is None:
+            return
+        if proc.poll() is None:
             # SIGKILL, not SIGTERM: wf-recorder traps SIGTERM to flush its recording,
             # and with our pipe reader gone that flush blocks forever — an immortal
             # capture squatting on a screencopy session (seen in prod 2026-07-03,
             # left video black for every later session). Rawvideo has no trailer
             # worth flushing; kill is correct.
-            self._proc.kill()
-        if self._proc is not None:
-            try:
-                self._proc.wait(timeout=1)   # reap immediately (SIGKILL can't block)
-            except Exception:
-                pass
+            proc.kill()
+        try:
+            proc.wait(timeout=1)       # reap immediately (SIGKILL can't block)
+        except Exception:
+            pass
+        if self._proc is proc:
+            self._proc = None
+
+    def check_output(self, names: list[str]) -> bool:
+        """Drop the capture if its output is no longer listed. A DISABLED output
+        (headless.sh on) doesn't make wf-recorder exit — it stays alive and silent
+        (measured 2026-11-10), so the track would hold its last frame forever.
+        Killing it gives the reader EOF; recv's normal loss path does the rest."""
+        if self._lost or self._stopped or self._proc is None or self._monitor in names:
+            return False
+        print(f"stream: {self._monitor} left the output list — dropping its capture", flush=True)
+        self._kill()
+        return True
+
+    def stop(self):
+        self._stopped = True
+        super().stop()
+        self._kill()
 
 
 # ---- session registry: "stream" (single, audio-carrying) + "pad:<id>" (N) ----
@@ -259,6 +434,17 @@ async def _teardown(key: str) -> None:
     if key == "stream":                   # audio machinery belongs to the stream slot only
         await _mic_teardown()
         await _route_restore()
+        if video_status["state"] != "idle":
+            _set_video_status(state="idle", output=None, requested=None)
+
+
+def outputs_changed(names: list[str]) -> None:
+    """Hyprland's output set changed: let the stream's screen capture notice if
+    its output went away (disabled or removed) — see ScreenTrack.check_output."""
+    s = _sessions.get("stream")
+    for t in (s or {}).get("tracks", []):
+        if isinstance(t, ScreenTrack):
+            t.check_output(names)
 
 
 async def stop(key: str = "stream") -> None:
@@ -327,6 +513,7 @@ async def handle_offer(sdp: str, type_: str, listen: bool = True, mic: bool = Fa
         v = ScreenTrack(video, scale=scale, fps=fps)
         sess["tracks"].append(v)
         pc.addTrack(v)
+        _set_video_status(state="live", output=video, requested=video)
 
     await pc.setLocalDescription(await pc.createAnswer())
     await _ice_complete(pc)                        # non-trickle: answer once gathering done

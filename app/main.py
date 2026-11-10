@@ -42,7 +42,8 @@ templates = Jinja2Templates(directory=BASE / "templates")
 
 # ---- live state broadcast --------------------------------------------------
 _clients: set[WebSocket] = set()
-_state: dict = {"hypr": {}, "telemetry": {}, "audio": {}, "sysinfo": {}}
+_state: dict = {"hypr": {}, "telemetry": {}, "audio": {}, "sysinfo": {},
+                "stream": dict(audio_rtc.video_status)}
 _mon_sig: tuple = ()   # last-seen monitor name set; remap when it changes
 # Cogitator telemetry history: volatile by design (~90 min @ 2s). Durable history
 # is the V3 Flight Recorder's job; dying on restart is correct scope hygiene.
@@ -67,6 +68,13 @@ async def _broadcast():
     _clients.difference_update(dead)
 
 
+async def _on_stream_change():
+    # Video capture moved or was lost (headless toggle, hotplug): push it now so the
+    # phone shows the state and its picker follows, instead of waiting a loop tick.
+    _state["stream"] = dict(audio_rtc.video_status)
+    await _broadcast()
+
+
 async def _on_hypr_change():
     global _mon_sig
     _state["hypr"] = await hypr.snapshot()
@@ -75,6 +83,7 @@ async def _on_hypr_change():
     sig = tuple(m["name"] for m in _state["hypr"].get("monitors", []))
     if sig and sig != _mon_sig:
         _mon_sig = sig
+        audio_rtc.outputs_changed(list(sig))      # a captured output may be gone
         await hypr.apply_monitor_mapping(_state["hypr"]["monitors"])
     await _broadcast()
 
@@ -107,6 +116,7 @@ async def _slow_loop():  # tailscale + processes
 async def _startup():
     global _mon_sig
     await audio_rtc.cleanup_stale()   # drop a virtual sink left by a hard crash
+    audio_rtc.set_listener(_on_stream_change)
     _state["hypr"] = await hypr.snapshot()
     # Apply the monitor→workspace mapping the deck now owns (replaces the static
     # `workspace = N, monitor:…` binds that used to live in general.conf).

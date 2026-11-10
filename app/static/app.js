@@ -378,7 +378,27 @@ function populateMonitors() {
   const mons = (lastState.hypr && lastState.hypr.monitors) || [];
   segRender(document.getElementById("stream-monitor"), mons.map((m) => ({ val: m.name, label: m.name })));
 }
+// Server-side video capture status (WS `stream` block): the capture survives its
+// output disappearing (headless toggle, hotplug) by moving to another one. Follow it
+// in the picker, so remote taps aim at the screen actually being shown, and say so.
+let monSig = "", streamOutSeen = null;
+function renderStream(s) {
+  const names = (s.hypr?.monitors || []).map((m) => m.name);
+  if (names.join(",") !== monSig) { monSig = names.join(","); populateMonitors(); }
+  const v = s.stream;
+  if (!v || !streamPc || streamPc.connectionState !== "connected") return;
+  if (v.state === "live" && v.output && v.output !== streamOutSeen && names.includes(v.output)) {
+    streamOutSeen = v.output;                    // only on a change: never fight a manual pick
+    document.getElementById("stream-monitor").dataset.value = v.output;
+    populateMonitors();
+  }
+  if (v.state === "lost") streamState(`● connected · video lost (${v.output}) — reacquiring…`, true);
+  else if (v.state === "live" && v.output && v.output !== v.requested)
+    streamState(`● connected · video moved to ${v.output}`, true);
+  else if (v.state === "live") streamState("● connected", true);
+}
 async function streamStop() {
+  streamOutSeen = null;
   if (streamPc) { streamPc.close(); streamPc = null; }
   if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
   document.getElementById("stream-audio").srcObject = null;
@@ -898,6 +918,7 @@ function renderContext(s) {
 
 function render(s) {
   lastState = s;
+  renderStream(s);
   renderStatus(s);
   renderContext(s);
   renderWorkspaces(s);
