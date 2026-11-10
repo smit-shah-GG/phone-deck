@@ -79,7 +79,7 @@
 
     /* Chakra-Petch structural labels. The !important + class specificity beats
        theme.css's global *{font-family:'IBM Plex Mono'!important}. Data stays mono. */
-    #host-switch, .drow, .phead h2, .phead .back, .phead .sub, .lbtn, .vpct, .ctxlab {
+    #host-switch, .drow, .phead h2, .phead .back, .phead .sub, .lbtn, .vpct, .ctxlab, #st-stream {
       font-family:'Chakra Petch','IBM Plex Mono',monospace !important; }
 
     .app { height:100%; display:flex; flex-direction:column; }
@@ -105,6 +105,18 @@
       border-color:color-mix(in srgb, #ff5252 50%, transparent) !important; }
     .band .cluster { display:flex; align-items:center; gap:10px; font-size:11px; color:var(--p-on-var); }
     .band .btn-i { color:var(--p-on-var); font-size:14px; cursor:pointer; padding:0 2px; }
+    /* stream indicator: dim when idle, glowing when connected, amber while video is lost */
+    #st-stream { font-size:10px; letter-spacing:.18em; padding:1px 5px; border-radius:3px;
+      background:none; cursor:pointer; border:1px solid var(--sh-line);
+      color:color-mix(in srgb, var(--p-on-var) 45%, transparent); }
+    #st-stream.live { color:var(--p-primary); border-color:var(--p-primary);
+      box-shadow:0 0 8px color-mix(in srgb, var(--p-primary) 55%, transparent); }
+    #st-stream.lost { color:var(--p-secondary); border-color:var(--p-secondary); }
+    /* a live stream picture gets no CRT overlay or flicker: it's for reading the rig's
+       screen, not for looking phosphor. :has() outranks theme.css's body::before/after. */
+    body:has(#panel-stream.show #stream-video-el:not(.hidden))::before,
+    body:has(#panel-stream.show #stream-video-el:not(.hidden))::after { display:none; }
+    body:has(#panel-stream.show #stream-video-el:not(.hidden)) .center { animation:none; }
 
     /* BODY */
     .body { flex:1; display:flex; min-height:0; }
@@ -189,6 +201,7 @@
         <span id="st-aud">MIC —</span>
       </div>
       <div class="cluster">
+        <button id="st-stream" title="stream · Idle">STRM</button>
         <span id="st-conn" class="w-2 h-2 rounded-full bg-zinc-600" title="link"></span>
         <span id="st-bat" class="text-zinc-400 tabular-nums hidden" title="phone battery"></span>
         <span id="st-clock" class="text-zinc-300 tabular-nums" title="tap for cogitator">--:--</span>
@@ -516,6 +529,6 @@
       <div id="cog-liturgy">++ cogitator vigil unbroken ++</div>
     </div>
   </div>
-  <script src="/static/app.js?v=18"></script>
+  <script src="/static/app.js?v=19"></script>
 </body>
 </html>

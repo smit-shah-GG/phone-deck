@@ -369,10 +369,16 @@ function sendInput(o) {
 // ---- audio streaming (WebRTC, bidirectional) ----
 let streamPc = null, micStream = null;
 const streamOpts = { listen: true, mic: false, phoneOnly: false, video: false };
-function streamState(text, on) {
+function streamState(text, on, kind) {   // kind: "live" (default when on) | "lost"
   document.getElementById("stream-status").textContent = text;
   document.getElementById("stream-dot").classList.toggle("bg-emerald-500", !!on);
   document.getElementById("stream-dot").classList.toggle("bg-zinc-600", !on);
+  const band = document.getElementById("st-stream");     // the band's STRM tag mirrors it
+  if (band) {
+    band.classList.remove("live", "lost");
+    if (on) band.classList.add(kind || "live");
+    band.title = "stream · " + text;
+  }
 }
 function populateMonitors() {
   const mons = (lastState.hypr && lastState.hypr.monitors) || [];
@@ -392,7 +398,7 @@ function renderStream(s) {
     document.getElementById("stream-monitor").dataset.value = v.output;
     populateMonitors();
   }
-  if (v.state === "lost") streamState(`● connected · video lost (${v.output}) — reacquiring…`, true);
+  if (v.state === "lost") streamState(`● connected · video lost (${v.output}) — reacquiring…`, true, "lost");
   else if (v.state === "live" && v.output && v.output !== v.requested)
     streamState(`● connected · video moved to ${v.output}`, true);
   else if (v.state === "live") streamState("● connected", true);
@@ -457,25 +463,45 @@ async function streamConnect() {
     await streamStop();
   }
 }
+// Options are baked into the SDP offer at Connect, so changing one mid-stream used to
+// do nothing while the running stream silently disagreed with the switches. Now any
+// change drops the stream at once and reconnects 400 ms after the LAST change (a burst
+// of toggles = one reconnect). The reconnect waits for the stop to finish: a slow stop
+// POST landing after the new offer would tear down the stream it just started.
+let reconnectTimer = null, stopping = null;
+function streamOptionChanged() {
+  if (!streamPc && !reconnectTimer) return;      // nothing live: options apply at next Connect
+  if (streamPc) stopping = streamStop().then(() => { if (reconnectTimer) streamState("reconnecting…", false); });
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    await stopping;
+    streamConnect();
+  }, 400);
+}
+function cancelReconnect() { clearTimeout(reconnectTimer); reconnectTimer = null; }
 (function initStream() {
   const c = document.getElementById("stream-connect");
   if (!c) return;
-  c.onclick = streamConnect;
-  document.getElementById("stream-stop").onclick = streamStop;
+  c.onclick = () => { cancelReconnect(); streamConnect(); };
+  document.getElementById("stream-stop").onclick = () => { cancelReconnect(); streamStop(); };
   const toggle = (id, key) => {
     const b = document.getElementById(id);
     b.classList.toggle("on", !!streamOpts[key]);          // reflect initial state
     b.onclick = () => {
       streamOpts[key] = !streamOpts[key];
       b.classList.toggle("on", streamOpts[key]);
+      streamOptionChanged();
     };
   };
   toggle("stream-listen", "listen");
   toggle("stream-mic", "mic");
   toggle("stream-phoneonly", "phoneOnly");
   toggle("stream-video", "video");
-  segInit(document.getElementById("stream-monitor"));
-  segInit(document.getElementById("stream-quality"));
+  segInit(document.getElementById("stream-monitor"), streamOptionChanged);
+  segInit(document.getElementById("stream-quality"), streamOptionChanged);
+  const tag = document.getElementById("st-stream");
+  if (tag) tag.onclick = () => { if (activePanel !== "stream") openPanel("stream"); };
 
   // touch-on-video -> remote cursor. Pointer events cover touch AND mouse (laptops).
   // tap = left click · drag = move-with-button · long-press = right click.
