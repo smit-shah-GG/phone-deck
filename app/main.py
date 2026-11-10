@@ -150,7 +150,7 @@ async def theme_css():
 
 @app.get("/theme")
 async def theme_get(_=Depends(auth.require_auth)):
-    return JSONResponse({"profile": theme._profile(), "ambient": theme.ambient()})
+    return JSONResponse({"profile": theme._profile(), "ambient": theme.ambient(), "crt": theme.crt()})
 
 
 @app.post("/theme")
@@ -162,6 +162,10 @@ async def theme_set(payload: dict, _=Depends(auth.require_auth)):
             return JSONResponse(out)
     if isinstance(payload.get("ambient"), dict):
         out = theme.set_ambient(payload["ambient"])
+        if not out.get("ok"):
+            return JSONResponse(out)
+    if isinstance(payload.get("crt"), bool):
+        out = theme.set_crt(payload["crt"])
     return JSONResponse(out or {"ok": False, "error": "nothing to set"})
 
 

@@ -383,8 +383,31 @@ nav { border-bottom:1px solid var(--p-outline); }
 """
 
 
+def crt() -> bool:
+    """CRT effects on? (vignette, scanlines, flicker, pulse, blink, boot-in). Default on."""
+    v = _cfg().get("crt", True)
+    return v if isinstance(v, bool) else True
+
+
+def set_crt(on: bool) -> dict:
+    err = _write_cfg(crt=bool(on))
+    return {"ok": False, "error": err} if err else {"ok": True, "crt": bool(on)}
+
+
+# Appended LAST when CRT effects are off, so it beats every rule above (and the shell
+# CSS in deck.html, via !important). Removes the overlays and every CRT motion; keeps
+# the palette and the static phosphor glow, which are the theme, not the CRT.
+_CRT_OFF = """
+/* CRT effects OFF (System → Theme) */
+body::before, body::after { display:none !important; }
+.band, .center, .rail, .panel.show, [data-page]:not(.hidden), .jv-cursor,
+.ws.bg-emerald-600, .sink.bg-emerald-700, .source.bg-emerald-700, .win.bg-emerald-700 {
+  animation:none !important; }
+"""
+
+
 def css() -> str:
     prof = _profile()
     vars_ = _auto_vars() if prof == "auto" else PROFILES.get(prof, PROFILES["green"])
     root = ":root{" + "".join(f"{k}:{v};" for k, v in vars_.items()) + "}"
-    return root + _SKIN
+    return root + _SKIN + ("" if crt() else _CRT_OFF)

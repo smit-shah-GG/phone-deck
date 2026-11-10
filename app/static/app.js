@@ -978,11 +978,18 @@ window.addEventListener("resize", applyDensity);
 (function initTheme() {
   const sel = document.getElementById("theme-profile");
   if (!sel) return;
-  segInit(sel, async (profile) => {
-    await post("/theme", { profile });
+  const reskin = () => {                                    // re-fetch the skin in place
     const link = document.querySelector('link[href^="/theme.css"]');
-    if (link) link.href = "/theme.css?t=" + Date.now();   // re-fetch the skin in place
-  });
+    if (link) link.href = "/theme.css?t=" + Date.now();
+  };
+  segInit(sel, async (profile) => { await post("/theme", { profile }); reskin(); });
+  const crt = document.getElementById("theme-crt");      // CRT effects on/off (server-side skin)
+  if (crt) crt.onclick = async () => {
+    const on = !crt.classList.contains("on");
+    crt.classList.toggle("on", on);
+    await post("/theme", { crt: on });
+    reskin();
+  };
   // Ambient (cogitator) settings live in the same config file/endpoint.
   const idleSeg = document.getElementById("amb-idle"), lit = document.getElementById("amb-lit");
   segInit(idleSeg, async (v) => { cogCfg.idle_min = +v; await post("/theme", { ambient: { idle_min: +v } }); });
@@ -993,6 +1000,7 @@ window.addEventListener("resize", applyDensity);
   };
   fetch("/theme").then((r) => r.json()).then((d) => {
     if (d.profile) segSet(sel, d.profile);
+    if (crt && typeof d.crt === "boolean") crt.classList.toggle("on", d.crt);
     if (d.ambient) {
       Object.assign(cogCfg, d.ambient);
       segSet(idleSeg, String(cogCfg.idle_min));
