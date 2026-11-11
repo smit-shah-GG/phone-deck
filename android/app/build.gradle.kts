@@ -34,6 +34,9 @@ android {
         versionCode = gitCount
         versionName = "0.1.$gitCount"
         buildConfigField("String", "DECK_URL", "\"${deckUrl.trimEnd('/')}\"")
+        // Both phones (M52, Pixel 10a) are arm64: ship only that, not libwebrtc for all four ABIs
+        // (49 MB → see release.sh output).
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
