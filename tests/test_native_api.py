@@ -93,3 +93,46 @@ def test_apk_serves_the_published_build(tmp_path, monkeypatch, meta, name):
     assert r.headers["content-type"] == "application/vnd.android.package-archive"
     assert name in r.headers["content-disposition"]
     assert r.headers["cache-control"] == "no-store"
+
+
+# ---- headless mode (#131): status from headless.sh's state file; on/off delegated to it ----
+
+def test_headless_status_reads_the_state_file(tmp_path, monkeypatch):
+    from app import headless
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    assert headless.status()["on"] is False
+    (tmp_path / "headless.state").write_text("1794390000\n")
+    st = headless.status()
+    assert st["on"] is True and st["since"] == 1794390000
+
+
+def test_state_carries_headless(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    (tmp_path / "headless.state").write_text("5")
+    _authed()
+    assert client.get("/state").json()["headless"]["on"] is True
+
+
+def test_headless_route_runs_the_script(tmp_path, monkeypatch):
+    from app import headless
+    calls = tmp_path / "calls"
+    script = tmp_path / "headless.sh"
+    script.write_text(f'#!/bin/sh\necho "$1" >> {calls}\necho "headless $1"\n')
+    script.chmod(0o755)
+    monkeypatch.setattr(headless, "SCRIPT", script)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    _anon()
+    assert client.post("/headless", json={"on": True}).status_code == 401
+    _authed()
+    r = client.post("/headless", json={"on": True}).json()
+    assert r["ok"] is True and r["output"] == "headless on"
+    client.post("/headless", json={"on": False})
+    assert calls.read_text().split() == ["on", "off"]
+
+
+def test_headless_route_without_the_script(tmp_path, monkeypatch):
+    from app import headless
+    monkeypatch.setattr(headless, "SCRIPT", tmp_path / "missing.sh")
+    _authed()
+    r = client.post("/headless", json={"on": True}).json()
+    assert r["ok"] is False and "no headless script" in r["error"]

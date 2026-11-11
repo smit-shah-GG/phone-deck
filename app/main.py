@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, fleet, grab, hid, hypr, joystick, modes, share, site19, sysinfo, telemetry, theme, voice
+from . import audio, audio_rtc, auth, brightness, cfgedit, commands, config, context, deckclient, fleet, grab, headless, hid, hypr, joystick, modes, share, site19, sysinfo, telemetry, theme, voice
 
 BASE = Path(__file__).parent
 app = FastAPI(title="phone-deck")
@@ -181,7 +181,14 @@ async def theme_set(payload: dict, _=Depends(auth.require_auth)):
 async def state(_=Depends(auth.require_auth)):
     # One snapshot of what /ws pushes, for clients that can't hold a socket open: the
     # native app's Quick Settings tiles and widget ask this when they wake (tasks #119).
-    return JSONResponse(_state)
+    # + headless mode, read from headless.sh's own state file (the Screens tile, #131).
+    return JSONResponse({**_state, "headless": headless.status()})
+
+
+@app.post("/headless")
+async def headless_set(payload: dict, _=Depends(auth.require_auth)):
+    # Runs the user's headless.sh on|off (screens black and staying black, box live).
+    return JSONResponse(await headless.set_on(bool(payload.get("on"))))
 
 
 @app.get("/app.apk")

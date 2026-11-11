@@ -95,18 +95,20 @@ class RigMusicTile : DeckTile() {
     }
 }
 
-/** Screens: every rig output off, or back on (DPMS). Per-monitor control stays in the app. */
+/** Screens = headless mode (user's call, 2026-11-11): lit while the panels are on; a tap runs
+ *  headless.sh on (outputs disabled, black whatever the input does, box and stream live) or off.
+ *  Not DPMS: any mouse/key wakes DPMS on lightning. Per-monitor DPMS stays in the app. */
 class ScreensTile : DeckTile() {
     override val label = "Screens"
     override val iconRes = R.drawable.ic_tile_screens
 
     override fun render(t: Tile, state: JsonObject) {
-        val mons = state.obj("hypr").list("monitors")
-        val on = mons.count { it.bool("dpms") != false }
+        val h = state.obj("headless")
+        val physical = state.obj("hypr").list("monitors").count { it.str("name")?.startsWith("HEADLESS") == false }
         when {
-            mons.isEmpty() -> t.set(Tile.STATE_UNAVAILABLE, label, "No screens")
-            on > 0 -> t.set(Tile.STATE_ACTIVE, label, "$on on")
-            else -> t.set(Tile.STATE_INACTIVE, label, "Off")
+            h == null || h.bool("available") == false -> t.set(Tile.STATE_UNAVAILABLE, label, "No headless script")
+            h.bool("on") == true -> t.set(Tile.STATE_INACTIVE, label, "Headless")
+            else -> t.set(Tile.STATE_ACTIVE, label, if (physical > 0) "$physical on" else "On")
         }
     }
 
@@ -114,15 +116,14 @@ class ScreensTile : DeckTile() {
         super.onClick()
         android.util.Log.i("archon", "tile: screens click")
         val t = qsTile ?: return
-        val mons = last.obj("hypr").list("monitors").mapNotNull { it.str("name") }
-        if (t.state == Tile.STATE_UNAVAILABLE || mons.isEmpty()) return
-        val turnOn = t.state != Tile.STATE_ACTIVE
-        t.state = if (turnOn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        t.subtitle = if (turnOn) "Turning on…" else "Turning off…"
+        if (t.state == Tile.STATE_UNAVAILABLE) return
+        val goHeadless = t.state == Tile.STATE_ACTIVE
+        t.state = if (goHeadless) Tile.STATE_INACTIVE else Tile.STATE_ACTIVE      // optimistic
+        t.subtitle = if (goHeadless) "Going headless…" else "Screens on…"
         t.updateTile()
         scope.launch {
-            mons.forEach { m -> Deck.post("/hypr/dpms", buildJsonObject { put("monitor", m); put("on", turnOn) }) }
-            refresh(after = 2500)                   // hypr state follows within ~2 s
+            Deck.postJson("/headless", buildJsonObject { put("on", goHeadless) })   // returns when the script is done
+            refresh(after = 2500)
         }
     }
 }
