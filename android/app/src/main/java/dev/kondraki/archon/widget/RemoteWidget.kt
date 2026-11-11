@@ -83,7 +83,7 @@ private fun mono(size: TextUnit, color: ColorProvider, bold: Boolean = false) =
     TextStyle(color = color, fontSize = size, fontFamily = FontFamily.Monospace, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal)
 
 /**
- * Remote, 4×2 (canvas Widget board; #121 decision 6): the M52's resting face at home. Row 1 =
+ * Lightning, 4×2 (the canvas Widget board's "Remote"; renamed when the full remote arrived, #143; #121 decision 6): the M52's resting face at home. Row 1 =
  * emblem, LIGHTNING, how fresh this is (tap = open Archon, ↻ = refresh); row 2 = now playing +
  * prev / play-pause / next on the rig; row 3 = LISTEN and SCREENS (lit when on), then the first
  * two modes. Offline: controls dim and stop responding; row 1 retries.
@@ -106,7 +106,7 @@ class RemoteWidget : GlanceAppWidget() {
 class RemoteReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget = RemoteWidget()
     override fun onEnabled(context: Context) { super.onEnabled(context); RemoteWorker.schedule(context) }
-    override fun onDisabled(context: Context) { super.onDisabled(context); RemoteWorker.cancel(context) }
+    override fun onDisabled(context: Context) { super.onDisabled(context); RemoteWorker.cancelIfUnused(context) }
     override fun onUpdate(context: Context, appWidgetManager: android.appwidget.AppWidgetManager, appWidgetIds: IntArray) {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
         RemoteWorker.schedule(context)                          // KEEP: survives reboots and reinstalls

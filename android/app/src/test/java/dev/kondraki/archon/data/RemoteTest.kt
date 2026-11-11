@@ -47,4 +47,22 @@ class RemoteTest {
         assertEquals("as of 14:23", remoteStamp(Fresh.STALE, "14:23"))
         assertEquals("rig offline · tap", remoteStamp(Fresh.OFFLINE, "14:23"))
     }
+
+    @Test fun remoteFieldsFromState() {
+        val s = remoteFrom(j("""{"audio":{"volume":62,"sink_muted":true,"mic_muted":false,
+            "sinks":[{"id":41,"name":"Speakers","active":false},{"id":57,"name":"Headphones","active":true}],
+            "now_playing":{"status":"Playing","title":"t"}},
+            "hypr":{"monitors":[{"name":"DP-1","active_ws":6,"focused":false},{"name":"DP-3","active_ws":2,"focused":true}]}}"""),
+            RemoteSnap(), false, true, 1)
+        assertEquals(62, s.volume); assertTrue(s.sinkMuted); assertFalse(s.micMuted); assertEquals(2, s.ws)
+        assertEquals(listOf(Output(41, "Speakers", false), Output(57, "Headphones", true)), s.outputs)
+        assertEquals(Output(41, "Speakers", false), nextOutput(s.outputs))
+        assertEquals(null, nextOutput(listOf(Output(1, "x", true))))
+    }
+
+    @Test fun shortOutputNames() {
+        assertEquals("ANALOG STEREO", shortOutput("Starship/Matisse HD Audio Controller Analog Stereo"))
+        assertEquals("SPEAKERS", shortOutput("Speakers"))
+        assertEquals("--", shortOutput(" "))
+    }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remote control widget (canvas RemoteControl board, #143). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <gradient android:type="radial" android:gradientRadius="50%" android:centerX="0.5" android:centerY="0.5" android:startColor="#FFFFD27A" android:endColor="#FFFF5A2A" />
+    <size android:width="9dp" android:height="9dp" />
+</shape>

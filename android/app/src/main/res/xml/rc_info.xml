@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remote, the full-screen TV remote (canvas RemoteControl board v2, #143): 4x5, the whole M52
+     screen. One layout (SizeMode.Single) whose stick takes the leftover height. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp" android:minHeight="420dp"
+    android:targetCellWidth="4" android:targetCellHeight="5"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="0"
+    android:description="@string/rc_desc"
+    android:initialLayout="@layout/glance_default_loading_layout" />

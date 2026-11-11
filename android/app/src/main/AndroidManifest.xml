@@ -85,11 +85,22 @@
              screen locking; carries the lock-screen player. -->
         <service android:name=".stream.StreamService" android:exported="false"
             android:foregroundServiceType="mediaPlayback|microphone" />
-        <!-- The Remote widget, 4x2 (canvas Widget board). No android:configure (handoff §9.7). -->
-        <receiver android:name=".widget.RemoteReceiver" android:exported="true" android:label="Remote">
+        <!-- Lightning, 4x2 (canvas Widget board; was "Remote" until the full remote, #143). No
+             android:configure (handoff §9.7). Same class, so placed widgets keep working. -->
+        <receiver android:name=".widget.RemoteReceiver" android:exported="true" android:label="Lightning">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/remote_info" />
         </receiver>
+        <!-- Remote, the full-screen TV remote (canvas RemoteControl board v2, #143). -->
+        <receiver android:name=".widget.RemoteControlReceiver" android:exported="true" android:label="Remote">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/rc_info" />
+        </receiver>
+        <!-- The remote's stick, awake: a small window over the widget's stick (no fingerprint, like
+             the tiles; any outside touch, pause or 30 s idle ends it). -->
+        <activity android:name=".StickActivity" android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" />
         <!-- File shares upload here, so leaving the share card or locking the phone doesn't stop them. -->
         <service android:name=".share.ShareService" android:exported="false"
             android:foregroundServiceType="dataSync" />

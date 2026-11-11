@@ -52,6 +52,9 @@ object RemoteState {
     val state: StateFlow<RemoteSnap> = _state
     private val _art = MutableStateFlow<Bitmap?>(null)
     val art: StateFlow<Bitmap?> = _art
+    /** Presses still on their way to the rig: the remote's IR LED is lit while this is > 0. */
+    private val _tx = MutableStateFlow(0)
+    val tx: StateFlow<Int> = _tx
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val refreshing = Mutex()
@@ -108,6 +111,13 @@ object RemoteState {
         }
     }
 
+    /** Run one press with the IR LED lit for its duration (the widget's only click feedback). */
+    suspend fun <T> sending(ctx: Context, block: suspend () -> T): T {
+        load(ctx)
+        _tx.value += 1; push()
+        try { return block() } finally { _tx.value -= 1; push() }
+    }
+
     /** An optimistic change after a tap (the refresh that follows confirms or undoes it). */
     suspend fun assume(ctx: Context, f: (RemoteSnap) -> RemoteSnap) { load(ctx); set(f(_state.value)) }
 
@@ -131,10 +141,11 @@ object RemoteState {
         push()
     }
 
+    /** Redraw every placed widget that has no live session (live ones follow the flows). */
     private suspend fun push() {
-        runCatching {
-            if (GlanceAppWidgetManager(app).getGlanceIds(RemoteWidget::class.java).isNotEmpty()) RemoteWidget().updateAll(app)
-        }
+        val m = GlanceAppWidgetManager(app)
+        runCatching { if (m.getGlanceIds(RemoteWidget::class.java).isNotEmpty()) RemoteWidget().updateAll(app) }
+        runCatching { if (m.getGlanceIds(RemoteControlWidget::class.java).isNotEmpty()) RemoteControlWidget().updateAll(app) }
     }
 }
 
@@ -151,6 +162,12 @@ class RemoteWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
             WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("remote-refresh", ExistingPeriodicWorkPolicy.KEEP, req)
         }
-        fun cancel(ctx: Context) = WorkManager.getInstance(ctx).cancelUniqueWork("remote-refresh")
+        /** Stop refreshing only when neither the Lightning widget nor the remote is placed. */
+        fun cancelIfUnused(ctx: Context) {
+            val m = android.appwidget.AppWidgetManager.getInstance(ctx)
+            val used = listOf(RemoteReceiver::class.java, RemoteControlReceiver::class.java)
+                .any { m.getAppWidgetIds(android.content.ComponentName(ctx, it)).isNotEmpty() }
+            if (!used) WorkManager.getInstance(ctx).cancelUniqueWork("remote-refresh")
+        }
     }
 }
