@@ -1,0 +1,14 @@
+# Versions follow ~/personal/tasks/android (measured latest stable 2026-11-10), plus
+# libwebrtc: io.github.webrtc-sdk:android, verified on Maven Central 2026-11-11
+# (150.7871.04, published 2026-10-23; the build LiveKit/flutter-webrtc use).
+[versions]
+agp = "9.5.1"
+okhttp = "5.5.1"
+webrtc = "150.7871.04"
+
+[libraries]
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+webrtc = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtc" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }

@@ -21,3 +21,12 @@ docs_internal/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Android client (android/): build outputs + machine-local SDK path. The release
+# key lives in ~/.config/tasks-android, never here.
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
