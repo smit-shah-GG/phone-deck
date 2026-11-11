@@ -87,7 +87,7 @@ private fun input(t: String, fx: Float? = null, fy: Float? = null, extra: (kotli
  * also draws the crosshair the server reports, which leads the video's lag.
  */
 @Composable
-fun VideoSurface(track: VideoTrack, crosshair: Boolean, modifier: Modifier = Modifier) {
+fun VideoSurface(track: VideoTrack, crosshair: Boolean, modifier: Modifier = Modifier, touch: Boolean = true) {
     val ph = LocalPh.current
     val ctx = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -113,7 +113,7 @@ fun VideoSurface(track: VideoTrack, crosshair: Boolean, modifier: Modifier = Mod
 
     Box(modifier.aspectRatio(aspect)) {
         AndroidView({ view }, Modifier.fillMaxSize())
-        BoxWithConstraints(Modifier.fillMaxSize().pointerInput(Unit) {
+        BoxWithConstraints(Modifier.fillMaxSize().then(if (!touch) Modifier else Modifier.pointerInput(Unit) {
             awaitEachGesture {
                 val g = VideoGesture()
                 val down = awaitFirstDown()
@@ -147,7 +147,7 @@ fun VideoSurface(track: VideoTrack, crosshair: Boolean, modifier: Modifier = Mod
                 timer.cancel()
                 emit(g.up(), last)
             }
-        }) {
+        })) {
             val c = cur
             if (crosshair && c != null) {
                 // 22 dp ring with a 34 dp cross, outlined in black so it reads on any picture

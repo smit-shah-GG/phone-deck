@@ -46,6 +46,7 @@ class ListenTile : TileService() {
                 if (st.videoOn) "Audio + video" else if (StreamEngine.opts.mic) "Audio + mic" else "Audio only")
             st.phase == Phase.CONNECTING -> Triple(Tile.STATE_ACTIVE, "Listen", "Connecting…")
             st.phase == Phase.RECONNECTING -> Triple(Tile.STATE_ACTIVE, "Listen", "Reconnecting…")
+            st.phase == Phase.PAUSED -> Triple(Tile.STATE_ACTIVE, "Listen", "Video paused")
             else -> Triple(Tile.STATE_INACTIVE, "Listen", if (isLocked && isSecure) "Unlock to start" else "Off")
         }
         t.state = state; t.label = label; t.subtitle = sub

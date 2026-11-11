@@ -142,6 +142,7 @@ class StreamService : Service() {
         val (title, sub) = when (st.phase) {
             Phase.CONNECTING -> "lightning" to "Connecting…"
             Phase.RECONNECTING -> "lightning" to "Reconnecting · rig unreachable"
+            Phase.PAUSED -> "lightning" to "Video paused · resumes when Archon is on screen"
             else -> if (hasPlayer && track != null) track to listOfNotNull(artist, if (o.mic && !micMuted) "mic live" else "on lightning").joinToString(" · ")
                     else "lightning" to "Listening · " + when { st.videoOn -> "${o.monitor ?: "screen"} + audio"; o.mic -> "mic live"; else -> "audio only" }
         }
@@ -162,7 +163,7 @@ class StreamService : Service() {
 
         val pbState = when {
             st.phase == Phase.CONNECTING || st.phase == Phase.RECONNECTING -> PlaybackState.STATE_CONNECTING
-            status == "Paused" -> PlaybackState.STATE_PAUSED
+            st.phase == Phase.PAUSED || status == "Paused" -> PlaybackState.STATE_PAUSED
             else -> PlaybackState.STATE_PLAYING
         }
         val actions = if (hasPlayer) PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
@@ -188,6 +189,7 @@ class StreamService : Service() {
         val (word, detail) = when {
             st.phase == Phase.CONNECTING -> "CONNECTING" to "offer sent\nwaiting for the rig"
             st.phase == Phase.RECONNECTING -> "SIGNAL LOST" to "rig unreachable\nretrying"
+            st.phase == Phase.PAUSED -> "PAUSED" to "video only\nresumes on screen"
             st.videoOn -> "STREAMING" to "${o.monitor ?: "screen"} · ${QUALITY[o.quality] ?: o.quality}\naudio + video"
             o.mic && !micMuted -> "MIC LIVE" to "phone mic → rig\n" + if (o.listen) "audio both ways" else "send only"
             else -> "LISTENING" to "audio only\nphone · $time"

@@ -59,7 +59,9 @@ data class StreamOpts(
     val anyDirection get() = listen || mic || video
 }
 
-enum class Phase { IDLE, CONNECTING, LIVE, RECONNECTING }
+/** PAUSED: a video-only session while nothing shows the video (#122 decision 1 leaves it no
+ *  media at all): no offer, nothing captured, resumes when Archon is on screen again. */
+enum class Phase { IDLE, CONNECTING, LIVE, RECONNECTING, PAUSED }
 
 data class StreamStatus(val phase: Phase = Phase.IDLE, val note: String = "Idle", val videoOn: Boolean = false)
 
@@ -133,6 +135,13 @@ object StreamEngine {
             delay(delayMs)
             var backoff = 2_000L
             var first = true
+            val o = opts
+            if (!o.listen && !o.mic && !(o.video && visible)) {          // video-only, hidden
+                withContext(Dispatchers.Main) { close() }
+                Deck.post("/audio/webrtc/stop")
+                _status.value = StreamStatus(Phase.PAUSED, "video paused · resumes on screen")
+                kotlinx.coroutines.awaitCancellation()                  // setVisible(true) restarts us
+            }
             while (isActive) {
                 _status.value = StreamStatus(if (first) Phase.CONNECTING else Phase.RECONNECTING,
                     if (first) "connecting…" else "reconnecting…")

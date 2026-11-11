@@ -33,6 +33,8 @@ import dev.kondraki.archon.ui.Opening
 import dev.kondraki.archon.ui.Phosphor
 import dev.kondraki.archon.ui.PinScreen
 import dev.kondraki.archon.ui.Shell
+import dev.kondraki.archon.ui.VideoSurface
+import androidx.compose.foundation.background
 import dev.kondraki.archon.ui.crt
 import kotlinx.coroutines.launch
 
@@ -43,6 +45,7 @@ import kotlinx.coroutines.launch
  */
 class MainActivity : ComponentActivity() {
     private val locked = mutableStateOf(true)
+    private val inPip = mutableStateOf(false)
     private val ph = mutableStateOf(Phosphor())
     private var stoppedAt = 0L
     private var prompting = false
@@ -61,6 +64,12 @@ class MainActivity : ComponentActivity() {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         }
         cachedPalette()?.let { ph.value = Phosphor.from(it) }
+        // PiP (#122 step 4): auto-enter on leaving the app while video streams; buttons follow the
+        // session (mic present / muted)
+        lifecycleScope.launch {
+            kotlinx.coroutines.flow.combine(StreamEngine.video, StreamEngine.micMuted, StreamEngine.status) { v, _, _ -> v != null }
+                .collect { hasVideo -> updatePip(hasVideo) }
+        }
         // Debug builds only: adb can hand over a token and skip the fingerprint, so the app can
         // be driven over adb. Release builds compile this out (BuildConfig.DEBUG is a constant).
         if (BuildConfig.DEBUG) {
@@ -73,13 +82,20 @@ class MainActivity : ComponentActivity() {
             val link by Deck.link.collectAsState()
             val state by Deck.state.collectAsState()
             val isLocked by locked
+            val pip by inPip
+            val video by StreamEngine.video.collectAsState()
+            // stopped from inside PiP: nothing left to show, so close the PiP window
+            LaunchedEffect(pip, video) { if (pip && video == null) moveTaskToBack(true) }
             LaunchedEffect(token) { if (token != null) Deck.session.refreshIfDue() }
             // fontScale 1: the PWA's text ignores the phone's font-size setting (the M52 is at 0.8,
             // which shrank every label to 80% here), so the app does too: identical to the deck.
             val d = LocalDensity.current
             CompositionLocalProvider(LocalPh provides ph.value, LocalDensity provides Density(d.density, fontScale = 1f)) {
                 Box(Modifier.fillMaxSize().crt(ph.value.crt)) {
+                    val v = video
                     when {
+                        pip && v != null -> Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black),
+                            contentAlignment = androidx.compose.ui.Alignment.Center) { VideoSurface(v, crosshair = false, touch = false) }
                         token == null -> PinScreen()
                         isLocked -> Opening(link) { askFingerprint() }
                         else -> Shell(state, link)
@@ -109,6 +125,20 @@ class MainActivity : ComponentActivity() {
         dev.kondraki.archon.data.InputLink.close()
         StreamEngine.setVisible(false)        // no surface shows the video now: drop it, keep audio (#122)
         super.onStop()
+    }
+
+    private fun updatePip(hasVideo: Boolean) {
+        setPictureInPictureParams(android.app.PictureInPictureParams.Builder()
+            .setAspectRatio(android.util.Rational(16, 9))
+            .setAutoEnterEnabled(hasVideo)
+            .setSeamlessResizeEnabled(true)
+            .setActions(if (hasVideo) dev.kondraki.archon.stream.PipActions.actions(this) else emptyList())
+            .build())
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip.value = isInPictureInPictureMode
     }
 
     /** Android's own fingerprint sheet ("Unlock Archon"), falling back to the phone's PIN. A
