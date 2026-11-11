@@ -188,6 +188,11 @@ class MonitorTrack(MediaStreamTrack):
         super().stop()
         if self._proc is not None and self._proc.poll() is None:
             self._proc.terminate()
+        if self._proc is not None:
+            try:
+                self._proc.wait(timeout=1)   # reap it: an unwaited parec lingered as a zombie (2026-11-11)
+            except Exception:
+                pass
 
 
 # quality preset -> (scale filter or None, framerate). Lower = more network-resilient.
@@ -466,11 +471,27 @@ def _register(key: str) -> tuple[RTCPeerConnection, dict]:
 
     @pc.on("connectionstatechange")
     async def _on_state():
-        if (pc.connectionState in ("failed", "closed", "disconnected")
-                and _sessions.get(key, {}).get("pc") is pc):
+        if pc.connectionState not in ("failed", "closed", "disconnected"):
+            return
+        if _sessions.get(key, {}).get("pc") is pc:
             await _teardown(key)
+        else:                             # orphaned (superseded) session: its own parts only
+            for t in sess["tracks"]:
+                t.stop()
 
     return pc, sess
+
+
+async def _abandon(pc: RTCPeerConnection, sess: dict) -> dict:
+    """A newer offer took the slot while this one was still being set up. Drop only
+    this session's own pc + tracks: the shared audio machinery (mic sink, routing,
+    video status) now belongs to the session that replaced it. Without this the old
+    offer 500'd on a closed pc, and once even kept a capture running for a minute
+    with nothing able to stop it (2026-11-11, tasks #125)."""
+    for t in sess["tracks"]:
+        t.stop()
+    await pc.close()
+    return {"error": "superseded"}
 
 
 async def _ice_complete(pc: RTCPeerConnection) -> None:
@@ -492,8 +513,13 @@ async def handle_offer(sdp: str, type_: str, listen: bool = True, mic: bool = Fa
     await _teardown("stream")                     # single slot: replace any existing
     pc, sess = _register("stream")
 
+    def superseded() -> bool:                     # a newer offer took the slot meanwhile
+        return _sessions.get("stream") is not sess
+
     if mic:
         await _mic_setup()
+        if superseded():
+            return await _abandon(pc, sess)
 
         @pc.on("track")
         def _on_track(track):
@@ -501,9 +527,13 @@ async def handle_offer(sdp: str, type_: str, listen: bool = True, mic: bool = Fa
                 _mic["task"] = asyncio.ensure_future(_consume_mic(track))
 
     await pc.setRemoteDescription(RTCSessionDescription(sdp=sdp, type=type_))
+    if superseded():                              # checked BEFORE routing: it's shared state
+        return await _abandon(pc, sess)
 
     if listen:                                    # attach our send track to the recvonly m-line
         device = await (_route_to_virtual() if phone_only else _default_sink_monitor())
+        if superseded():
+            return await _abandon(pc, sess)
         track = MonitorTrack(device)
         sess["tracks"].append(track)
         pc.addTrack(track)
@@ -517,4 +547,6 @@ async def handle_offer(sdp: str, type_: str, listen: bool = True, mic: bool = Fa
 
     await pc.setLocalDescription(await pc.createAnswer())
     await _ice_complete(pc)                        # non-trickle: answer once gathering done
+    if superseded():                              # the widest window: gathering takes ~5 s (#106)
+        return await _abandon(pc, sess)
     return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}

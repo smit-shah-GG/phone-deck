@@ -278,13 +278,15 @@ async def media(act: str, _=Depends(auth.require_auth)):
 # ---- audio streaming (WebRTC, rig -> phone) --------------------------------
 @app.post("/audio/webrtc/offer")
 async def webrtc_offer(payload: dict, _=Depends(auth.require_auth)):
-    return JSONResponse(await audio_rtc.handle_offer(
+    out = await audio_rtc.handle_offer(
         payload["sdp"], payload["type"],
         listen=bool(payload.get("listen", True)),
         mic=bool(payload.get("mic", False)),
         phone_only=bool(payload.get("phoneOnly", False)),
         video=payload.get("video") or None,
-        video_quality=payload.get("videoQuality", "medium")))
+        video_quality=payload.get("videoQuality", "medium"))
+    # 409, not 500: a newer offer took the single stream slot mid-setup (tasks #125)
+    return JSONResponse(out, status_code=409 if out.get("error") == "superseded" else 200)
 
 
 @app.post("/audio/webrtc/stop")

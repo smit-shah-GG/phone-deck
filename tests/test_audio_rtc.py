@@ -177,3 +177,131 @@ def test_outputs_changed_reaches_only_the_stream_video_track(monkeypatch):
     assert vp.killed
     monkeypatch.setattr(audio_rtc, "_sessions", {})
     audio_rtc.outputs_changed([])                     # no stream: a no-op, not a crash
+
+
+# ---- concurrent offers: the newer one wins cleanly, the older one leaves nothing behind (#125) ----
+import types
+
+
+class _FakePC:
+    instances = []
+    gate_next = None                      # handed to the next pc: pauses setRemoteDescription
+
+    def __init__(self):
+        self.closed, self.tracks, self.handlers = False, [], {}
+        self.connectionState, self.iceGatheringState = "new", "complete"
+        self.localDescription, self.gate = None, _FakePC.gate_next
+        _FakePC.gate_next = None
+        _FakePC.instances.append(self)
+
+    def on(self, ev):
+        def deco(f):
+            self.handlers[ev] = f
+            return f
+        return deco
+
+    async def setRemoteDescription(self, d):
+        if self.gate:
+            await self.gate.wait()
+
+    def addTrack(self, t):
+        if self.closed:
+            raise RuntimeError("RTCPeerConnection is closed")   # what aiortc does
+        self.tracks.append(t)
+
+    async def createAnswer(self):
+        return types.SimpleNamespace(sdp="answer-sdp", type="answer")
+
+    async def setLocalDescription(self, d):
+        self.localDescription = d
+
+    async def close(self):
+        self.closed = True
+
+
+class _FakeTrack:
+    def __init__(self, *a, **k):
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+
+@pytest.fixture
+def fake_rtc(monkeypatch):
+    _FakePC.instances, _FakePC.gate_next = [], None
+    async def noop(*a, **k):
+        return "sink.monitor"
+    monkeypatch.setattr(audio_rtc, "RTCPeerConnection", _FakePC)
+    monkeypatch.setattr(audio_rtc, "RTCSessionDescription", lambda sdp, type: None)
+    monkeypatch.setattr(audio_rtc, "MonitorTrack", _FakeTrack)
+    monkeypatch.setattr(audio_rtc, "ScreenTrack", _FakeTrack)
+    for name in ("_default_sink_monitor", "_route_to_virtual", "_route_restore", "_mic_teardown", "_mic_setup"):
+        monkeypatch.setattr(audio_rtc, name, noop)
+    monkeypatch.setattr(audio_rtc, "_sessions", {})
+    monkeypatch.setattr(audio_rtc, "_listener", None)
+    monkeypatch.setattr(audio_rtc, "video_status", {"state": "idle", "output": None, "requested": None})
+
+
+def test_offer_superseded_mid_setup_returns_superseded_not_500(fake_rtc):
+    async def run():
+        gate = asyncio.Event()
+        _FakePC.gate_next = gate                         # offer 1 pauses inside setRemoteDescription
+        t1 = asyncio.create_task(audio_rtc.handle_offer("o1", "offer", listen=True, video="DP-3"))
+        await asyncio.sleep(0)
+        r2 = await audio_rtc.handle_offer("o2", "offer", listen=True, video="DP-3")
+        gate.set()
+        return await t1, r2
+
+    r1, r2 = asyncio.run(run())
+    pc1, pc2 = _FakePC.instances
+    assert r1 == {"error": "superseded"}                 # was: RuntimeError -> HTTP 500
+    assert r2["sdp"] == "answer-sdp"
+    assert pc1.closed and pc1.tracks == []               # never added a track to the dead pc
+    assert audio_rtc._sessions["stream"]["pc"] is pc2 and len(pc2.tracks) == 2
+
+
+def test_offer_superseded_during_ice_wait_stops_its_tracks(fake_rtc, monkeypatch):
+    gates = {}
+    async def ice(pc):                                   # offer 1 waits here, as aiortc does for ~5 s
+        if pc is _FakePC.instances[0]:
+            await gates["ice"].wait()
+    monkeypatch.setattr(audio_rtc, "_ice_complete", ice)
+
+    async def run():
+        gates["ice"] = asyncio.Event()
+        t1 = asyncio.create_task(audio_rtc.handle_offer("o1", "offer", listen=True, video="DP-3"))
+        await asyncio.sleep(0)
+        r2 = await audio_rtc.handle_offer("o2", "offer", listen=True, video="DP-3")
+        gates["ice"].set()
+        return await t1, r2
+
+    r1, r2 = asyncio.run(run())
+    pc1 = _FakePC.instances[0]
+    assert r1 == {"error": "superseded"} and r2["sdp"] == "answer-sdp"
+    assert pc1.closed and len(pc1.tracks) == 2
+    assert all(t.stopped for t in pc1.tracks)            # nothing left capturing for a dead peer
+
+
+def test_failed_orphan_session_stops_its_own_tracks_only(fake_rtc):
+    async def run():
+        pc_old, sess_old = audio_rtc._register("stream")
+        old = _FakeTrack(); sess_old["tracks"].append(old)
+        pc_new, sess_new = audio_rtc._register("stream")     # took the slot; old is now an orphan
+        new = _FakeTrack(); sess_new["tracks"].append(new)
+        pc_old.connectionState = "failed"
+        await pc_old.handlers["connectionstatechange"]()
+        return old, new, pc_new
+
+    old, new, pc_new = asyncio.run(run())
+    assert old.stopped and not new.stopped
+    assert audio_rtc._sessions["stream"]["pc"] is pc_new
+
+
+def test_monitor_track_stop_reaps_its_process():
+    t = audio_rtc.MonitorTrack("sink.monitor")
+    calls = []
+    t._proc = types.SimpleNamespace(poll=lambda: None, terminate=lambda: calls.append("term"),
+                                    wait=lambda timeout=None: calls.append("wait"))
+    t.stop()
+    assert calls == ["term", "wait"]                     # an unwaited parec stayed a zombie
