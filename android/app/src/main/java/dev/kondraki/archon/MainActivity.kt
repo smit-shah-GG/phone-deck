@@ -33,6 +33,7 @@ import dev.kondraki.archon.ui.Opening
 import dev.kondraki.archon.ui.Phosphor
 import dev.kondraki.archon.ui.PinScreen
 import dev.kondraki.archon.ui.Shell
+import dev.kondraki.archon.ui.Skin
 import dev.kondraki.archon.ui.VideoSurface
 import androidx.compose.foundation.background
 import dev.kondraki.archon.ui.crt
@@ -46,7 +47,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val locked = mutableStateOf(true)
     private val inPip = mutableStateOf(false)
-    private val ph = mutableStateOf(Phosphor())
+    private val ph get() = Skin.ph
     private var stoppedAt = 0L
     private var prompting = false
 
@@ -63,7 +64,7 @@ class MainActivity : ComponentActivity() {
         window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         }
-        cachedPalette()?.let { ph.value = Phosphor.from(it) }
+        Skin.loadCached(this)
         // PiP (#122 step 4): auto-enter on leaving the app while video streams; buttons follow the
         // session (mic present / muted)
         lifecycleScope.launch {
@@ -111,7 +112,7 @@ class MainActivity : ComponentActivity() {
         Deck.hold("ui")
         StreamEngine.setVisible(true)
         lifecycleScope.launch { if (Deck.session.token.value != null) runCatching { ShortcutActivity.refresh(this@MainActivity) } }
-        lifecycleScope.launch { runCatching { Deck.palette() }.onSuccess { savePalette(it); ph.value = Phosphor.from(it) } }
+        lifecycleScope.launch { Skin.refresh(this@MainActivity) }
     }
 
     override fun onResume() {
@@ -163,17 +164,6 @@ class MainActivity : ComponentActivity() {
                     prompting = false                        // cancelled: stay on the opening screen; tap the emblem
                 }
             })
-    }
-
-    // The last palette, so a cold start paints the right colours before /palette answers.
-    private fun cachedPalette(): Palette? = runCatching {
-        getSharedPreferences("ui", Context.MODE_PRIVATE).getString("palette", null)
-            ?.let { Deck.json.decodeFromString(Palette.serializer(), it) }
-    }.getOrNull()
-
-    private fun savePalette(p: Palette) {
-        getSharedPreferences("ui", Context.MODE_PRIVATE).edit()
-            .putString("palette", Deck.json.encodeToString(Palette.serializer(), p)).apply()
     }
 
     private companion object { const val RELOCK_MS = 5 * 60 * 1000L }

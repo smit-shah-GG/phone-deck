@@ -69,3 +69,24 @@ val CssLine = TextStyle(
     lineHeight = 1.5.em,
     lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
 )
+
+/** The live palette, shared by the activity and anything that changes the theme (System →
+ *  Theme): refresh() re-reads GET /palette, repaints everything and caches it for cold starts. */
+object Skin {
+    val ph = androidx.compose.runtime.mutableStateOf(Phosphor())
+
+    fun loadCached(ctx: android.content.Context) {
+        runCatching {
+            ctx.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).getString("palette", null)
+                ?.let { ph.value = Phosphor.from(dev.kondraki.archon.data.Deck.json.decodeFromString(Palette.serializer(), it)) }
+        }
+    }
+
+    suspend fun refresh(ctx: android.content.Context) {
+        runCatching { dev.kondraki.archon.data.Deck.palette() }.onSuccess { p ->
+            ctx.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit()
+                .putString("palette", dev.kondraki.archon.data.Deck.json.encodeToString(Palette.serializer(), p)).apply()
+            ph.value = Phosphor.from(p)
+        }
+    }
+}
