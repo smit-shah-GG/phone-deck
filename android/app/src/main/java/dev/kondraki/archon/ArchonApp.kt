@@ -11,5 +11,6 @@ class ArchonApp : Application() {
         super.onCreate()
         Deck.session = Session(this)
         StreamEngine.init(this)
+        dev.kondraki.archon.widget.RemoteState.watch(this)     // the Remote widget follows /ws while it's open
     }
 }

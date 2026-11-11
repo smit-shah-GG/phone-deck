@@ -85,6 +85,11 @@
              screen locking; carries the lock-screen player. -->
         <service android:name=".stream.StreamService" android:exported="false"
             android:foregroundServiceType="mediaPlayback|microphone" />
+        <!-- The Remote widget, 4x2 (canvas Widget board). No android:configure (handoff §9.7). -->
+        <receiver android:name=".widget.RemoteReceiver" android:exported="true" android:label="Remote">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/remote_info" />
+        </receiver>
         <!-- File shares upload here, so leaving the share card or locking the phone doesn't stop them. -->
         <service android:name=".share.ShareService" android:exported="false"
             android:foregroundServiceType="dataSync" />

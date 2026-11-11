@@ -37,6 +37,12 @@ class ShortcutActivity : Activity() {
             Toast.makeText(app, listen(), Toast.LENGTH_SHORT).show()
             finish(); return
         }
+        // the Remote widget's LISTEN chip: a toggle (the tile and the Listen shortcut only start)
+        if (what == "listen-toggle" && Deck.session.token.value != null) {
+            val msg = if (StreamEngine.active) { StreamService.stop(this); "Stopped listening" } else listen()
+            Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
+            finish(); return
+        }
         CoroutineScope(Dispatchers.Main).launch {
             val msg = when {
                 Deck.session.token.value == null -> "Open Archon and sign in first"

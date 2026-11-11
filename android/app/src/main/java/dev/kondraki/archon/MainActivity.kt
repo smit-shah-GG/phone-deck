@@ -76,6 +76,10 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.DEBUG) {
             intent.getStringExtra("token")?.let { Deck.session.adopt(it) }
             if (intent.getBooleanExtra("unlocked", false)) locked.value = false
+            // --ez pinWidget true: ask the launcher to place the Remote widget (its own Add dialog)
+            if (intent.getBooleanExtra("pinWidget", false))
+                android.appwidget.AppWidgetManager.getInstance(this).requestPinAppWidget(
+                    android.content.ComponentName(this, dev.kondraki.archon.widget.RemoteReceiver::class.java), null, null)
         }
 
         setContent {

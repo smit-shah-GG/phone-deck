@@ -82,6 +82,8 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.glance.appwidget)            // the Remote widget (canvas Widget board)
+    implementation(libs.work.runtime)                // its 15-minute refresh
     implementation(libs.webrtc)                  // the R0 probe today; the stream in phase 2
     testImplementation(libs.junit)
 }
