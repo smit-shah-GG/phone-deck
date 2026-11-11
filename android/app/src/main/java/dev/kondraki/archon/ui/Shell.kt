@@ -176,7 +176,8 @@ private fun Battery() {
 private fun Clock() {
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) { while (true) { now = Date(); delay(1000) } }
-    Readout(SimpleDateFormat("HH:mm", Locale.getDefault()).format(now))
+    // tap the clock: the cogitator (app.js st-clock → cogShow)
+    Box(Modifier.tap { Cog.show() }) { Readout(SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)) }
 }
 
 @Composable

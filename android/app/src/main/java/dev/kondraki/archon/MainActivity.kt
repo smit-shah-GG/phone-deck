@@ -8,6 +8,7 @@ import android.hardware.biometrics.BiometricPrompt
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,6 +26,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import dev.kondraki.archon.ui.Cog
+import dev.kondraki.archon.ui.Cogitator
+import dev.kondraki.archon.ui.VoiceLog
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import dev.kondraki.archon.data.Deck
 import dev.kondraki.archon.stream.StreamEngine
 import dev.kondraki.archon.data.Palette
@@ -105,6 +111,16 @@ class MainActivity : ComponentActivity() {
                         isLocked -> Opening(link) { askFingerprint() }
                         else -> Shell(state, link)
                     }
+                    // the cogitator sits over the unlocked shell; any touch exits (dispatchTouchEvent)
+                    if (Cog.on && !pip && token != null && !isLocked) Cogitator(state)
+                    // burn-in guard (#123 F): after 10 min in the cogitator, dim this window to 15%
+                    LaunchedEffect(Cog.on) {
+                        window.attributes = window.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
+                        if (Cog.on) {
+                            delay(10 * 60_000L)
+                            window.attributes = window.attributes.apply { screenBrightness = 0.15f }
+                        }
+                    }
                 }
             }
         }
@@ -112,6 +128,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        Cog.touched()                                             // coming back counts as activity
+        // the cogitator's idle timer (app.js: every 5 s), held off while voice records, the rig's
+        // screen is showing (video), PiP, or the app is locked (#123 F)
+        idleJob?.cancel()
+        idleJob = lifecycleScope.launch {
+            runCatching { Cog.loadCfg() }
+            var n = 0
+            while (true) {
+                delay(5_000)
+                if (++n % 12 == 0) runCatching { Cog.loadCfg() }         // the System panel may have changed it
+                if (!Cog.on && !locked.value && Deck.session.token.value != null && !inPip.value && !VoiceLog.busy &&
+                    StreamEngine.video.value == null && System.currentTimeMillis() - Cog.lastTouch > Cog.idleMin * 60_000L) Cog.show()
+            }
+        }
         if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_MS) locked.value = true
         Deck.hold("ui")
         StreamEngine.setVisible(true)
@@ -123,6 +153,20 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (locked.value && Deck.session.token.value != null) askFingerprint()
+    }
+
+    /** Any touch is activity; a touch while the cogitator is up only exits it, and the whole
+     *  gesture is swallowed so it never clicks through to the shell (app.js cogEatClick). */
+    private var idleJob: Job? = null
+    private var swallowing = false
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        Cog.touched()
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && Cog.on) { Cog.hide(); swallowing = true }
+        if (swallowing) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) swallowing = false
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onStop() {

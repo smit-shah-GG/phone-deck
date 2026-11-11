@@ -85,7 +85,11 @@ class Trace(val t: JsonObject) {
 private const val NO_REPLY = "✗ no reply from the rig (timed out or unreachable)"
 
 /** The log outlives switching panels (the PWA keeps its DOM while the page lives). */
-object VoiceLog { val traces = mutableStateListOf<Trace>() }
+object VoiceLog {
+    val traces = mutableStateListOf<Trace>()
+    /** Recording or transcribing: the cogitator must never idle in mid-recording (app.js _voiceBusy). */
+    @Volatile var busy = false
+}
 
 /**
  * Voice, 1:1 with app.js initVoice(): the mic (Desktop = the rig's mic via /voice/start+stop,
@@ -100,6 +104,7 @@ fun VoicePanel() {
     val scope = rememberCoroutineScope()
     var mic by remember { mutableStateOf("desktop") }
     var state by remember { mutableStateOf("idle") }                 // idle | recording | processing
+    LaunchedEffect(state) { VoiceLog.busy = state != "idle" }
     var recMode by remember { mutableStateOf("desktop") }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var confirm by remember { mutableStateOf<Trace?>(null) }
