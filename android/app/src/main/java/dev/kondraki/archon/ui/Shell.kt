@@ -76,8 +76,8 @@ fun Shell(state: JsonObject?, link: Link) {
                     when (val p = panel) {
                         null -> Home(state)
                         "audio" -> AudioPanel(state)
-                        "more" -> AboutPanel()          // phase 1: About; Files/Config/System join in phase 3
-                        else -> NotPorted(p)
+                        "more" -> AboutPanel { panel = it }   // its launchers open Files / Config / System
+                        else -> NotPorted(p) { panel = it }
                     }
                 }
                 Rail(state, panel, Modifier.width(railW).fillMaxHeight()) { panel = if (panel == it) null else it }   // the lit row toggles home
@@ -88,7 +88,9 @@ fun Shell(state: JsonObject?, link: Link) {
 
 private val PANELS = listOf("audio" to "Audio", "stream" to "Stream", "voice" to "Voice", "modes" to "Modes",
     "site19" to "Site-19", "remote" to "Remote")
-private val PHASE = mapOf("stream" to 2, "voice" to 3, "modes" to 3, "site19" to 3, "remote" to 3)
+private val PHASE = mapOf("stream" to 2, "voice" to 3, "modes" to 3, "site19" to 3, "remote" to 3,
+    "files" to 3, "config" to 3, "system" to 3)
+private val SUB = mapOf("files" to "Files", "config" to "Config", "system" to "System")   // under More (PANEL_PARENT)
 
 @Composable
 private fun Band(state: JsonObject?, link: Link) {
@@ -183,17 +185,20 @@ private fun Rail(state: JsonObject?, panel: String?, modifier: Modifier, onPanel
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             PANELS.forEach { (key, label) -> DockRow(label, panel == key, muted = key in PHASE) { onPanel(key) } }
             Spacer(Modifier.weight(1f))
-            DockRow("More …", panel == "more", muted = true) { onPanel("more") }
+            DockRow("More …", panel == "more" || panel in SUB, muted = true) { onPanel("more") }
         }
     }
 }
 
 @Composable
-private fun NotPorted(key: String) {
+private fun NotPorted(key: String, onBack: (String) -> Unit) {
     val ph = LocalPh.current
-    val name = PANELS.firstOrNull { it.first == key }?.second ?: "More"
+    val name = PANELS.firstOrNull { it.first == key }?.second ?: SUB[key] ?: "More"
     Column(Modifier.fillMaxSize().padding(6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        PanelHead(name)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (key in SUB) Label("‹ More", 10.sp, ph.onVar, spacing = 0.14f, modifier = Modifier.tap { onBack("more") })
+            PanelHead(name)
+        }
         Mono("Not in Archon yet: arrives in phase ${PHASE[key] ?: 3}. The PWA still has it.", 13.sp, ph.onVar, maxLines = 3)
     }
 }

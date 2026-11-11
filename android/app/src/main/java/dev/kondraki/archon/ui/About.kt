@@ -1,10 +1,5 @@
 package dev.kondraki.archon.ui
 
-import android.app.StatusBarManager
-import android.content.ComponentName
-import android.graphics.drawable.Icon
-import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -35,15 +30,12 @@ import androidx.compose.ui.unit.sp
 import dev.kondraki.archon.BuildConfig
 import dev.kondraki.archon.R
 import dev.kondraki.archon.data.Deck
-import dev.kondraki.archon.tiles.RigMusicTile
-import dev.kondraki.archon.tiles.ScreensTile
 
 /** More → About: the app's own Foundation dossier (canvas About board, right phone), the ACS
- *  classification, the CC BY-SA credit the emblem needs, and one-tap tile adding. */
+ *  classification, the PWA's More launchers (Files / Config / System) and the build credits. */
 @Composable
-fun AboutPanel() {
+fun AboutPanel(onOpen: (String) -> Unit) {
     val ph = LocalPh.current
-    val ctx = LocalContext.current
     Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PanelHead("About")
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -67,11 +59,12 @@ fun AboutPanel() {
                 }
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                CardTitle("Quick settings")
-                if (Build.VERSION.SDK_INT >= 33) {
-                    TileButton("Add the Rig music tile") { addTile(ctx, RigMusicTile::class.java, "Rig music", R.drawable.ic_tile_music) }
-                    TileButton("Add the Screens tile") { addTile(ctx, ScreensTile::class.java, "Screens", R.drawable.ic_tile_screens) }
-                } else Mono("Add them from the Quick Settings editor.", 12.sp, ph.onVar)
+                // the PWA's More launcher (stowed utilities), above the build section
+                Row(Modifier.fillMaxWidth().height(96.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf("files" to "Files", "config" to "Config", "system" to "System").forEach { (key, name) ->
+                        LaunchButton(name, Modifier.weight(1f).fillMaxHeight()) { onOpen(key) }
+                    }
+                }
                 CardTitle("Build")
                 Mono("Archon ${BuildConfig.VERSION_NAME} · ${BuildConfig.APPLICATION_ID}", 11.sp, ph.onVar, maxLines = 2)
                 Mono("Emblem: SCP Foundation logo by far2, high-res by Aelanna, CC BY-SA 3.0 (creativecommons.org/licenses/by-sa/3.0).",
@@ -114,26 +107,11 @@ private fun Section(title: String, body: String) {
     }
 }
 
+/** .lbtn: a big framed launcher button (the PWA's More screen). */
 @Composable
-private fun TileButton(text: String, onClick: () -> Unit) {
+private fun LaunchButton(name: String, modifier: Modifier, onClick: () -> Unit) {
     val ph = LocalPh.current
-    val shape = RoundedCornerShape(6.dp)
-    Box(Modifier.fillMaxWidth().clip(shape).background(ph.high).border(1.dp, ph.outline, shape).tap(onClick)
-        .padding(horizontal = 12.dp, vertical = 10.dp)) { Mono(text, 13.sp, ph.on) }
+    val shape = RoundedCornerShape(8.dp)
+    Box(modifier.clip(shape).background(ph.high).border(1.dp, ph.line, shape).tap(onClick),
+        contentAlignment = Alignment.Center) { Label(name, 15.sp, ph.on, spacing = 0.2f) }
 }
-
-private fun addTile(ctx: android.content.Context, cls: Class<*>, label: String, icon: Int) {
-    if (Build.VERSION.SDK_INT < 33) return
-    ctx.getSystemService(StatusBarManager::class.java).requestAddTileService(
-        ComponentName(ctx, cls), label, Icon.createWithResource(ctx, icon), ctx.mainExecutor,
-    ) { result ->
-        val msg = when (result) {
-            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "$label tile added"
-            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "$label is already in Quick Settings"
-            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "Not added"
-            else -> "Couldn't add it here: use the Quick Settings editor"
-        }
-        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
-    }
-}
-
