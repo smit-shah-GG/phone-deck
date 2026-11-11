@@ -81,6 +81,9 @@ class Trace(val t: JsonObject) {
     var result by mutableStateOf<JsonObject?>(null)
 }
 
+/** A null reply: the rig took longer than Deck.slow allows, or the link dropped. */
+private const val NO_REPLY = "✗ no reply from the rig (timed out or unreachable)"
+
 /** The log outlives switching panels (the PWA keeps its DOM while the page lives). */
 object VoiceLog { val traces = mutableStateListOf<Trace>() }
 
@@ -106,6 +109,7 @@ fun VoicePanel() {
         state = "idle"
     }
     fun note(n: String) = add(buildJsonObject { put("heard", ""); put("note", n) })
+    fun noReply() = buildJsonObject { put("heard", ""); put("note", NO_REPLY) }
     fun startDevice() {
         val f = File(ctx.cacheDir, "voice.m4a").apply { delete() }
         runCatching {
@@ -126,7 +130,8 @@ fun VoicePanel() {
         val plan = tr.t["plan"] as? JsonObject ?: return
         tr.status = "running"
         scope.launch {
-            val r = Deck.postJson("/voice/execute", buildJsonObject { put("plan", plan) })
+            val r = Deck.postJson("/voice/execute", buildJsonObject { put("plan", plan) }, Deck.slow)
+                ?: buildJsonObject { put("ok", false); put("result", NO_REPLY) }
             tr.result = r
             tr.status = if (r?.bool("ok") == true) "done" else "fail"
         }
@@ -155,8 +160,8 @@ fun VoicePanel() {
                                 if (recMode == "device") {
                                     val rec = recorder; recorder = null
                                     runCatching { rec?.stop() }; rec?.release()
-                                    add(transcribe(ctx))
-                                } else add(Deck.postJson("/voice/stop"))
+                                    add(transcribe(ctx) ?: noReply())
+                                } else add(Deck.postJson("/voice/stop", client = Deck.slow) ?: noReply())
                             }
                         }
                     }
@@ -280,7 +285,7 @@ private suspend fun transcribe(ctx: Context): JsonObject? = withContext(Dispatch
         val f = File(ctx.cacheDir, "voice.m4a")
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", "voice.m4a", f.asRequestBody("audio/mp4".toMediaType())).build()
-        Deck.http.newCall(Request.Builder().url("${Deck.url}/voice/transcribe").post(form).build()).execute().use { r ->
+        Deck.slow.newCall(Request.Builder().url("${Deck.url}/voice/transcribe").post(form).build()).execute().use { r ->
             if (r.isSuccessful) Deck.json.parseToJsonElement(r.body.string()).jsonObject else null
         }.also { f.delete() }
     }.getOrNull()

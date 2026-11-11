@@ -139,9 +139,13 @@ object Deck {
     suspend fun getJson(path: String): JsonObject? = getElement(path) as? JsonObject
 
     /** POST and read the JSON answer ({"ok": …}); null when the deck can't be reached. */
-    suspend fun postJson(path: String, body: JsonObject = buildJsonObject { }): JsonObject? = withContext(Dispatchers.IO) {
+    /** For calls that wait on the rig's own work (speech-to-text, Friday's LLM answer: a cold
+     *  model load alone is ~15 s). Covers jarvis' SearXNG 15 s + ollama 90 s with headroom. */
+    val slow: OkHttpClient by lazy { http.newBuilder().readTimeout(150, TimeUnit.SECONDS).build() }
+
+    suspend fun postJson(path: String, body: JsonObject = buildJsonObject { }, client: OkHttpClient = http): JsonObject? = withContext(Dispatchers.IO) {
         runCatching {
-            http.newCall(Request.Builder().url("$url$path")
+            client.newCall(Request.Builder().url("$url$path")
                 .post(body.toString().toRequestBody("application/json".toMediaType())).build())
                 .execute().use { r -> if (r.isSuccessful) json.parseToJsonElement(r.body.string()) as? JsonObject else null }
         }.getOrNull()
