@@ -14,3 +14,13 @@
 -keep class * implements androidx.glance.appwidget.action.ActionCallback { public <init>(); }
 # WorkManager builds workers by name too (its own rules cover this; explicit to be safe).
 -keep class * extends androidx.work.ListenableWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }
+
+# libwebrtc's native code also reaches into org.jni_zero (JniZero, @CalledByNative, …) by name.
+# The webrtc-sdk AAR ships no consumer rules and nothing in Java references the package, so R8
+# deleted all of it: every stream start crashed in release builds only (Pixel, 0.1.75, 2026-11-11).
+-keep class org.jni_zero.** { *; }
+-keepclasseswithmembers class * { @org.jni_zero.CalledByNative <methods>; }
+-keepclasseswithmembers class * { @org.jni_zero.CalledByNativeUnchecked <methods>; }
+-keepclasseswithmembers class * { @org.jni_zero.AccessedByNative <fields>; }
+# JniZero.setJniClassLoader names JniZeroJni, which the AAR doesn't ship (unused: debug runs without it).
+-dontwarn org.jni_zero.JniZeroJni
