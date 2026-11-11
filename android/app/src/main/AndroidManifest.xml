@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <application android:label="deck·probe" android:theme="@android:style/Theme.Material.NoActionBar">
+    <application android:label="archon·probe" android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".rtcprobe.ProbeActivity" android:exported="true"
             android:screenOrientation="sensorLandscape">
             <intent-filter>

@@ -406,8 +406,18 @@ body::before, body::after { display:none !important; }
 """
 
 
-def css() -> str:
+def _vars() -> dict[str, str]:
     prof = _profile()
-    vars_ = _auto_vars() if prof == "auto" else PROFILES.get(prof, PROFILES["green"])
-    root = ":root{" + "".join(f"{k}:{v};" for k, v in vars_.items()) + "}"
+    return _auto_vars() if prof == "auto" else PROFILES.get(prof, PROFILES["green"])
+
+
+def palette() -> dict:
+    """The palette as data, for the native app (it can't read CSS): the same colours
+    /theme.css puts in :root, keyed without the --p- prefix, plus the CRT switch."""
+    return {"profile": _profile(), "crt": crt(),
+            "colors": {k.removeprefix("--p-"): v for k, v in _vars().items()}}
+
+
+def css() -> str:
+    root = ":root{" + "".join(f"{k}:{v};" for k, v in _vars().items()) + "}"
     return root + _SKIN + ("" if crt() else _CRT_OFF)

@@ -22,6 +22,8 @@ BIND_PORT = int(os.environ.get("DECK_BIND_PORT", "8765"))
 JWT_TTL_DAYS = int(os.environ.get("DECK_JWT_TTL_DAYS", "7"))
 # Set true once served over HTTPS (tailscale serve) so the cookie is Secure-only.
 SECURE_COOKIES = os.environ.get("DECK_SECURE_COOKIES", "0") == "1"
+# Where android/release.sh publishes the signed Archon build that /app.apk serves.
+APK_DIR = Path(os.environ.get("DECK_APK_DIR", Path.home() / ".local" / "share" / "phone-deck" / "android"))
 
 
 def _load() -> dict:

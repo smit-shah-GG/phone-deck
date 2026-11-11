@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "phonedeck"
+rootProject.name = "archon"
 include(":app")

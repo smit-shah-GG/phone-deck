@@ -20,6 +20,7 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXP
 
 import asyncio
 import contextlib
+import json
 import mimetypes
 import time
 from collections import deque
@@ -148,6 +149,13 @@ async def theme_css():
     return Response(theme.css(), media_type="text/css", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/palette")
+async def palette():
+    # The same colours as /theme.css, as JSON for the native app, which can't read CSS.
+    # Public for the same reason theme.css is: the PIN screen is themed too.
+    return JSONResponse(theme.palette(), headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/theme")
 async def theme_get(_=Depends(auth.require_auth)):
     return JSONResponse({"profile": theme._profile(), "ambient": theme.ambient(), "crt": theme.crt()})
@@ -167,6 +175,30 @@ async def theme_set(payload: dict, _=Depends(auth.require_auth)):
     if isinstance(payload.get("crt"), bool):
         out = theme.set_crt(payload["crt"])
     return JSONResponse(out or {"ok": False, "error": "nothing to set"})
+
+
+@app.get("/state")
+async def state(_=Depends(auth.require_auth)):
+    # One snapshot of what /ws pushes, for clients that can't hold a socket open: the
+    # native app's Quick Settings tiles and widget ask this when they wake (tasks #119).
+    return JSONResponse(_state)
+
+
+@app.get("/app.apk")
+async def android_apk(_=Depends(auth.require_auth)):
+    # The latest signed Archon build, for tap-to-install from a phone's browser (which
+    # already holds the deck cookie). android/release.sh publishes it.
+    apk = config.APK_DIR / "archon.apk"
+    if not apk.is_file():
+        return JSONResponse({"error": "no Android build published yet (run android/release.sh)"},
+                            status_code=404)
+    try:
+        ver = json.loads((config.APK_DIR / "archon.apk.json").read_text()).get("version") or "latest"
+    except (OSError, ValueError, AttributeError):
+        ver = "latest"
+    ver = "".join(c for c in str(ver) if c.isalnum() or c in "._-") or "latest"
+    return FileResponse(apk, media_type="application/vnd.android.package-archive",
+                        filename=f"archon-{ver}.apk", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/history")
@@ -196,13 +228,25 @@ async def login(pin: str = Form(...)):
         auth.record_failure()
         return RedirectResponse("/login?bad=1", status_code=303)
     auth.record_success()
-    resp = RedirectResponse("/", status_code=303)
+    return _with_session(RedirectResponse("/", status_code=303), auth.issue_token())
+
+
+def _with_session(resp, token: str):
     resp.set_cookie(
-        auth.COOKIE_NAME, auth.issue_token(),
+        auth.COOKIE_NAME, token,
         httponly=True, samesite="strict", secure=config.SECURE_COOKIES,
         max_age=config.JWT_TTL_DAYS * 86400,
     )
     return resp
+
+
+@app.post("/auth/refresh")
+async def auth_refresh(_=Depends(auth.require_auth)):
+    # A valid session in, a fresh one out (tasks #119). The native app calls this while its
+    # token is still good, so the PIN is only needed again after a week without contact.
+    # Returned as JSON for the app (it keeps the token in the Keystore) and as the cookie.
+    token = auth.issue_token()
+    return _with_session(JSONResponse({"token": token, "exp": auth.token_exp(token)}), token)
 
 
 # ---- deck shell ------------------------------------------------------------

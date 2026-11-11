@@ -45,6 +45,14 @@ def issue_token() -> str:
     return jwt.encode(payload, config.JWT_KEY, algorithm=ALGO)
 
 
+def token_exp(token: str) -> int:
+    """Expiry of a token we issued, as epoch seconds (0 if it doesn't decode)."""
+    try:
+        return int(jwt.decode(token, config.JWT_KEY, algorithms=[ALGO])["exp"])
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError):
+        return 0
+
+
 def _valid(token: str | None) -> bool:
     if not token:
         return False

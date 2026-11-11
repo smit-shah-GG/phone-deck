@@ -1,4 +1,4 @@
-package dev.kondraki.phonedeck.rtcprobe
+package dev.kondraki.archon.rtcprobe
 
 import android.util.Log
 import org.webrtc.EglBase

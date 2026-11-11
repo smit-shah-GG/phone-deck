@@ -154,8 +154,11 @@ async def snapshot() -> dict:
                for s in pw_sources]
     player = _pick_player(await _players())
     psel = ("-p", player) if player else ()
-    np = (await _out("playerctl", *psel, "metadata", "--format", "{{status}}|{{artist}} - {{title}}")).strip()
-    status, _, title = np.partition("|")
+    np = (await _out("playerctl", *psel, "metadata", "--format", "{{status}}|||{{artist}}|||{{title}}")).strip()
+    status, _, rest = np.partition("|||")
+    artist, _, track = rest.partition("|||")
+    artist, track = artist.strip(), track.strip()
+    title = f"{artist} - {track}"     # the combined line the PWA shows (unchanged)
     art_url = await _art_url(player)
     return {
         "volume": int(m.group(1)) if m else None,
@@ -167,6 +170,8 @@ async def snapshot() -> dict:
         "now_playing": {
             "status": status,
             "title": title.strip(" -"),
+            "artist": artist,           # split for the native player's metadata (tasks #119)
+            "track": track,
             "player": player or "",
             # cache-bust key; the art itself is served by the /media/art proxy
             "art_key": hashlib.md5(art_url.encode()).hexdigest()[:12] if art_url else "",

@@ -1,6 +1,6 @@
 {
-  "name": "phone-deck",
-  "short_name": "deck",
+  "name": "Archon",
+  "short_name": "Archon",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

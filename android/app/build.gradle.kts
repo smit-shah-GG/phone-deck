@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.kondraki.phonedeck"
+    namespace = "dev.kondraki.archon"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.kondraki.phonedeck"
+        applicationId = "dev.kondraki.archon"
         minSdk = 31
         targetSdk = 37
         versionCode = 1
