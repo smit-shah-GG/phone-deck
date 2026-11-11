@@ -2,6 +2,9 @@ package dev.kondraki.archon.ui
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -58,3 +61,11 @@ fun parseHex(s: String): Color? {
     if (h.length != 6) return null
     return h.toLongOrNull(16)?.let { Color(0xFF000000 or it) }
 }
+
+/** CSS's line box: the PWA inherits line-height 1.5 from Tailwind's preflight, so every text
+ *  run is 1.5× its font size tall, centred. Android text is ~1.2× by default, which made
+ *  every row shorter than the PWA's (measured 2026-11-11: dock rows 26 vs 34.4 units). */
+val CssLine = TextStyle(
+    lineHeight = 1.5.em,
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+)

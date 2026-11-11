@@ -57,7 +57,7 @@ val Phosphor.active get() = lerp(Color.Black, primary, 0.18f)  // --sh-active
 /** Chakra Petch structural label (dock rows, panel heads, wordmark). */
 @Composable
 fun Label(text: String, size: TextUnit, color: Color, spacing: Float = 0.12f, glow: Boolean = false, bold: Boolean = false, modifier: Modifier = Modifier) {
-    Text(text.uppercase(), modifier = modifier, maxLines = 1, overflow = TextOverflow.Clip, style = TextStyle(
+    Text(text.uppercase(), modifier = modifier, maxLines = 1, overflow = TextOverflow.Clip, style = CssLine + TextStyle(
         fontFamily = Chakra, fontWeight = if (bold) FontWeight.Bold else FontWeight.SemiBold,
         fontSize = size, letterSpacing = size * spacing, color = color,
         shadow = if (glow) Shadow(color.copy(alpha = 0.45f), Offset.Zero, 14f) else null,
@@ -68,7 +68,7 @@ fun Label(text: String, size: TextUnit, color: Color, spacing: Float = 0.12f, gl
 @Composable
 fun Mono(text: String, size: TextUnit = 12.sp, color: Color = LocalPh.current.on, modifier: Modifier = Modifier, maxLines: Int = 1) {
     Text(text, modifier = modifier, maxLines = maxLines, overflow = TextOverflow.Ellipsis,
-        style = TextStyle(fontFamily = Plex, fontSize = size, color = color))
+        style = CssLine + TextStyle(fontFamily = Plex, fontSize = size, color = color))
 }
 
 /** A tap with a light haptic tick: the native upgrade the PWA couldn't do. */
@@ -89,11 +89,11 @@ fun PanelHead(title: String) {
 @Composable
 fun MuteButton(label: String, muted: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val ph = LocalPh.current
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(6.dp)
     Box(
         modifier.clip(shape)
             .background(if (muted) lerp(Color.Black, DANGER, 0.22f) else ph.high)
-            .border(1.dp, if (muted) DANGER else ph.line, shape)
+            .border(1.dp, if (muted) DANGER else ph.outline, shape)
             .tap(onClick).padding(vertical = 16.dp),
         contentAlignment = Alignment.Center,
     ) { Mono(label, 14.sp, if (muted) DANGER else ph.on) }
@@ -113,7 +113,7 @@ fun DevRow(name: String, on: Boolean, onClick: () -> Unit) {
     ) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(if (on) ph.primary else ph.outline)
             .then(if (on) Modifier.glow(ph.primary, 8.dp) else Modifier))
-        Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(
+        Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = CssLine + TextStyle(
             fontFamily = Plex, fontSize = 13.sp, color = if (on) ph.primary else ph.onVar,
             shadow = if (on) Shadow(ph.primary.copy(alpha = 0.4f), Offset.Zero, 12f) else null))
     }
@@ -152,7 +152,7 @@ fun VolRow(volume: Int?, muted: Boolean, onMute: () -> Unit, onSet: (Int) -> Uni
             },
         )
         Text(if (volume == null && !dragging) "—" else shown.toInt().toString(), modifier = Modifier.width(28.dp),
-            style = TextStyle(fontFamily = Chakra, fontSize = 10.sp, color = ph.onVar), maxLines = 1)
+            style = CssLine + TextStyle(fontFamily = Chakra, fontSize = 10.sp, color = ph.onVar), maxLines = 1)
     }
 }
 
@@ -165,6 +165,7 @@ fun Transport(playing: Boolean, onMedia: (String) -> Unit) {
             val pp = act == "play-pause"
             Box(
                 Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(ph.high)
+                    .border(1.dp, ph.outline, RoundedCornerShape(8.dp))
                     .then(if (pp) Modifier.innerGlow(ph.primary) else Modifier)
                     .tap { onMedia(act) }.padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
@@ -215,4 +216,15 @@ fun Modifier.crt(on: Boolean): Modifier = if (!on) this else drawWithContent {
     }
     drawRect(Brush.radialGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.5f),
         center = center, radius = size.maxDimension * 0.62f))
+}
+
+/** p.uppercase in theme.css: an amber card title trailing off into a box-drawing rule. */
+@Composable
+fun CardTitle(text: String) {
+    val ph = LocalPh.current
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text.uppercase(), maxLines = 1, style = CssLine + TextStyle(fontFamily = Plex, fontSize = 12.sp,
+            letterSpacing = 1.5.sp, color = ph.secondary, shadow = Shadow(ph.secondary.copy(alpha = 0.45f), Offset.Zero, 12f)))
+        Box(Modifier.weight(1f).height(1.dp).background(ph.outline.copy(alpha = 0.7f)))
+    }
 }

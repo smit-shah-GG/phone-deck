@@ -53,7 +53,7 @@ fun Opening(link: Link, onTap: () -> Unit) {
             Image(painterResource(R.drawable.emblem), contentDescription = "Unlock",
                 modifier = Modifier.size(132.dp).tap(onTap), colorFilter = ColorFilter.tint(ph.primary))
             Wordmark(38)
-            Text(status, style = TextStyle(fontFamily = Plex, fontSize = 11.sp, letterSpacing = 3.sp,
+            Text(status, style = CssLine + TextStyle(fontFamily = Plex, fontSize = 11.sp, letterSpacing = 3.sp,
                 color = if (link == Link.OFFLINE) ph.secondary else ph.onVar))
         }
     }
@@ -62,7 +62,7 @@ fun Opening(link: Link, onTap: () -> Unit) {
 @Composable
 fun Wordmark(size: Int) {
     val ph = LocalPh.current
-    Text("ARCHON", style = TextStyle(
+    Text("ARCHON", style = CssLine + TextStyle(
         fontFamily = Chakra, fontWeight = FontWeight.Bold, fontSize = size.sp, letterSpacing = (size * 0.32).sp,
         color = ph.primary, shadow = Shadow(ph.primary.copy(alpha = 0.6f), Offset.Zero, 24f)))
 }

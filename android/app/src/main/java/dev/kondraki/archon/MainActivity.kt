@@ -19,6 +19,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -46,11 +48,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)   // edge to edge: no inset for the cutout
         WindowCompat.getInsetsController(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())          // fullscreen, like the PWA
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)   // the PWA's wake lock
+        // Draw under the camera cutout like the fullscreen PWA does; otherwise landscape loses
+        // ~90 px on the punch-hole side (measured on the M52 2026-11-11).
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
         cachedPalette()?.let { ph.value = Phosphor.from(it) }
         // Debug builds only: adb can hand over a token and skip the fingerprint, so the app can
         // be driven over adb. Release builds compile this out (BuildConfig.DEBUG is a constant).
@@ -65,7 +73,10 @@ class MainActivity : ComponentActivity() {
             val state by Deck.state.collectAsState()
             val isLocked by locked
             LaunchedEffect(token) { if (token != null) Deck.session.refreshIfDue() }
-            CompositionLocalProvider(LocalPh provides ph.value) {
+            // fontScale 1: the PWA's text ignores the phone's font-size setting (the M52 is at 0.8,
+            // which shrank every label to 80% here), so the app does too: identical to the deck.
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalPh provides ph.value, LocalDensity provides Density(d.density, fontScale = 1f)) {
                 Box(Modifier.fillMaxSize().crt(ph.value.crt)) {
                     when {
                         token == null -> PinScreen()

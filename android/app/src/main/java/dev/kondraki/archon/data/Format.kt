@@ -43,7 +43,7 @@ fun gpuLine(g: JsonObject): String {
 fun cpuLine(c: JsonObject): String {
     val t = c.num("temp")
     val temp = if (t != null && t != 0.0) " · ${t.toInt()}°" else ""
-    return "CPU ${(c.num("util") ?: 0.0).toInt()}%$temp · ${plain(c["mem_used"])}/${plain(c["mem_total"])}G"
+    return "CPU ${(c.num("util") ?: 0.0).toInt()}%$temp · ${plainNum(c["mem_used"])}/${plainNum(c["mem_total"])}G"
 }
 
 fun micLine(a: JsonObject): String {
@@ -59,7 +59,8 @@ fun nowPlayingLine(np: JsonObject?): String {
     return (if (np.str("status") == "Playing") "▶ " else "‖ ") + title
 }
 
-private fun plain(e: JsonElement?): String = (e as? JsonPrimitive)?.let {
+/** A JSON number as the PWA prints it: 144 not 144.0, 14.5 as is. */
+fun plainNum(e: JsonElement?): String = (e as? JsonPrimitive)?.let {
     it.longOrNull?.toString() ?: it.doubleOrNull?.let { d -> if (d % 1.0 == 0.0) d.toLong().toString() else d.toString() } ?: it.content
 } ?: "—"
 

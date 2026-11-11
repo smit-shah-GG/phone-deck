@@ -122,6 +122,15 @@ object Deck {
         }.getOrDefault(false)
     }
 
+    /** GET a JSON object (brightness levels, context config); null on any failure. */
+    suspend fun getJson(path: String): JsonObject? = withContext(Dispatchers.IO) {
+        runCatching {
+            http.newCall(Request.Builder().url("$url$path").build()).execute().use { r ->
+                if (r.isSuccessful) json.parseToJsonElement(r.body.string()).jsonObject else null
+            }
+        }.getOrNull()
+    }
+
     suspend fun palette(): Palette = withContext(Dispatchers.IO) {
         http.newCall(Request.Builder().url("$url/palette").build()).execute().use { r ->
             check(r.isSuccessful) { "HTTP ${r.code}" }

@@ -66,19 +66,20 @@ import java.util.Locale
 @Composable
 fun Shell(state: JsonObject?, link: Link) {
     val ph = LocalPh.current
-    var panel by rememberSaveable { mutableStateOf("audio") }
+    var panel by rememberSaveable { mutableStateOf<String?>(null) }      // null = home
     Column(Modifier.fillMaxSize().background(ph.bg)) {
         Band(state, link)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val railW = max(150.dp, maxWidth * 0.2f)
             Row(Modifier.fillMaxSize()) {
                 Box(Modifier.weight(1f).fillMaxHeight().padding(8.dp)) {
-                    when (panel) {
+                    when (val p = panel) {
+                        null -> Home(state)
                         "audio" -> AudioPanel(state)
-                        else -> NotPorted(panel)
+                        else -> NotPorted(p)
                     }
                 }
-                Rail(state, panel, Modifier.width(railW).fillMaxHeight()) { panel = it }
+                Rail(state, panel, Modifier.width(railW).fillMaxHeight()) { panel = if (panel == it) null else it }   // the lit row toggles home
             }
         }
     }
@@ -163,7 +164,7 @@ private fun Clock() {
 }
 
 @Composable
-private fun Rail(state: JsonObject?, panel: String, modifier: Modifier, onPanel: (String) -> Unit) {
+private fun Rail(state: JsonObject?, panel: String?, modifier: Modifier, onPanel: (String) -> Unit) {
     val ph = LocalPh.current
     val a = state.obj("audio")
     val scope = rememberCoroutineScope()

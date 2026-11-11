@@ -94,7 +94,9 @@ private fun NowPlaying(np: JsonObject?, modifier: Modifier) {
     val key = np.str("art_key").orEmpty()
     var art by remember { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(key) { art = if (key.isEmpty()) null else Deck.art(key) }   // only refetched per track
-    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(ph.surface).padding(12.dp)) {
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
+        .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(ph.surface, ph.low)))
+        .cornerTicks(ph.primary.copy(alpha = 0.55f)).padding(12.dp)) {
         val side = min(160.dp, min(maxWidth, maxHeight - 28.dp))
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
@@ -108,7 +110,7 @@ private fun NowPlaying(np: JsonObject?, modifier: Modifier) {
             }
             Text(nowPlayingLine(np), maxLines = 1, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                style = TextStyle(fontFamily = Plex, fontSize = 12.sp, color = ph.onVar))
+                style = CssLine + TextStyle(fontFamily = Plex, fontSize = 12.sp, color = ph.onVar))
         }
     }
 }
@@ -117,7 +119,7 @@ private fun NowPlaying(np: JsonObject?, modifier: Modifier) {
 private fun DeviceList(title: String, devices: List<JsonObject>, onPick: (Int) -> Unit) {
     val ph = LocalPh.current
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Label(title, 12.sp, ph.onVar.copy(alpha = 0.7f), spacing = 0.05f)
+        CardTitle(title)
         devices.forEach { d ->
             DevRow(d.str("name") ?: "?", d.bool("active") == true) { d.num("id")?.toInt()?.let(onPick) }
         }
