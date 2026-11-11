@@ -52,7 +52,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.lifecycleScope
 import dev.kondraki.archon.data.Deck
 import dev.kondraki.archon.data.InputLink
-import dev.kondraki.archon.ui.Plex
+import androidx.compose.ui.text.font.FontFamily
 import dev.kondraki.archon.widget.RcGeom
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -217,7 +217,7 @@ private fun Stick(stickHeightPx: Int, onTouch: () -> Unit, onLeft: (Boolean) -> 
             // the cap: leans toward the thumb, inside the well
             val capPx = RcGeom.CAP_DP * density
             Box(Modifier.align(Alignment.Center).offset {
-                val max = 46f * density
+                val max = 56f * density
                 val len = hypot(cap.x, cap.y)
                 val k = if (len > max) max / len else 1f
                 IntOffset((cap.x * k).roundToInt(), (cap.y * k).roundToInt())
@@ -225,7 +225,7 @@ private fun Stick(stickHeightPx: Int, onTouch: () -> Unit, onLeft: (Boolean) -> 
                 .background(Brush.radialGradient(listOf(Color(0xFF3A2828), Color(0xFF241818), Color(0xFF160E0E)),
                     center = Offset(capPx * 0.4f, capPx * 0.35f), radius = capPx * 0.7f))
                 .border(1.dp, Color(0xFF4A2C2C), CircleShape), contentAlignment = Alignment.Center) {
-                Text("LIVE", style = TextStyle(fontFamily = Plex, fontSize = 9.sp, letterSpacing = 1.sp, color = RED))
+                Text("LIVE", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = RED))
             }
         }
         // L · R, drawn over the widget's own; hold L + drag the stick = drag-select
@@ -255,6 +255,6 @@ private fun Btn(label: String, held: Boolean, modifier: Modifier, onPress: (Bool
                 onPress(false)
             }
         }, contentAlignment = Alignment.Center) {
-        Text(label, style = TextStyle(fontFamily = Plex, fontSize = 15.sp, color = if (held) RED else Color(0xFFEDC3C3)))
+        Text(label, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 22.sp, color = if (held) RED else Color(0xFFEDC3C3)))
     }
 }

@@ -75,9 +75,9 @@ import kotlinx.serialization.json.add
 
 /** Geometry the wake layer (StickActivity) mirrors exactly: it only gets the stick box's bounds. */
 object RcGeom {
-    const val CAP_DP = 84
+    const val CAP_DP = 104
     const val LR_GAP_DP = 10
-    const val LR_H_DP = 46
+    const val LR_H_DP = 56
 }
 
 private object Rc {
@@ -91,8 +91,12 @@ private object Rc {
     val dark = ColorProvider(Color(0xFF1A0505))
 }
 
+/** The phone's font-size setting (the M52 is at 0.8): widget text in sp follows it, so the remote
+ *  divides it back out, like the app pins fontScale 1, and stays the size it was drawn at. */
+@Volatile private var FS = 1f
+
 private fun mono(size: TextUnit, color: ColorProvider, bold: Boolean = false, center: Boolean = false) =
-    TextStyle(color = color, fontSize = size, fontFamily = FontFamily.Monospace,
+    TextStyle(color = color, fontSize = (size.value / FS).sp, fontFamily = FontFamily.Monospace,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, textAlign = if (center) TextAlign.Center else TextAlign.Start)
 
 /**
@@ -105,6 +109,7 @@ class RemoteControlWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         RemoteState.load(context)
+        FS = context.resources.configuration.fontScale.takeIf { it > 0f } ?: 1f
         val s = RemoteState.state.value
         if (!s.live && System.currentTimeMillis() - s.at > 60_000L) RemoteState.scope.launch { RemoteState.refresh(context) }
         provideContent {
@@ -136,18 +141,18 @@ private fun Handset(ctx: Context, s: RemoteSnap, sending: Boolean) {
     fun act(a: Action) = if (off) null else a
     Column(GlanceModifier.fillMaxSize().background(ImageProvider(R.drawable.rc_body)).padding(horizontal = 18.dp, vertical = 14.dp)) {
         // IR LED · SOURCE ................ POWER
-        Row(GlanceModifier.fillMaxWidth().height(46.dp), verticalAlignment = Alignment.CenterVertically) {
-            Image(ImageProvider(if (sending) R.drawable.rc_led_on else R.drawable.rc_led_off), "Sending", modifier = GlanceModifier.size(9.dp))
+        Row(GlanceModifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+            Image(ImageProvider(if (sending) R.drawable.rc_led_on else R.drawable.rc_led_off), "Sending", modifier = GlanceModifier.size(11.dp))
             Spacer(GlanceModifier.width(8.dp))
-            SmallKey("SOURCE", GlanceModifier.width(72.dp).height(28.dp), act(op("source")), dead = off)
+            SmallKey("SOURCE", GlanceModifier.width(104.dp).height(40.dp), act(op("source")), dead = off)
             Spacer(GlanceModifier.defaultWeight())
-            Box(GlanceModifier.size(46.dp).background(ImageProvider(if (standby) R.drawable.rc_power_lit else R.drawable.rc_power))
+            Box(GlanceModifier.size(56.dp).background(ImageProvider(if (standby) R.drawable.rc_power_lit else R.drawable.rc_power))
                 .let { m -> act(op("power"))?.let { m.clickable(it) } ?: m }, contentAlignment = Alignment.Center) {
-                Image(ImageProvider(R.drawable.rc_power_icon), "Power: screens", colorFilter = ColorFilter.tint(Rc.dark), modifier = GlanceModifier.size(20.dp))
+                Image(ImageProvider(R.drawable.rc_power_icon), "Power: screens", colorFilter = ColorFilter.tint(Rc.dark), modifier = GlanceModifier.size(26.dp))
             }
         }
         // the display: tap = open Archon (offline: retry)
-        Column(GlanceModifier.fillMaxWidth().padding(top = 12.dp).height(70.dp).background(ImageProvider(R.drawable.rc_lcd)).padding(horizontal = 10.dp, vertical = 8.dp)
+        Column(GlanceModifier.fillMaxWidth().padding(top = 12.dp).height(88.dp).background(ImageProvider(R.drawable.rc_lcd)).padding(horizontal = 12.dp, vertical = 10.dp)
             .clickable(if (off) actionRunCallback<RefreshAction>() else actionStartActivity(openApp(ctx)))) {
             val line1 = when {
                 off -> "NO SIGNAL · TAP TO RETRY"
@@ -155,18 +160,18 @@ private fun Handset(ctx: Context, s: RemoteSnap, sending: Boolean) {
                 !s.hasPlayer -> "NOTHING PLAYING"
                 else -> (if (s.playing) "▶ " else "‖ ") + s.title.uppercase()
             }
-            Text(line1, style = mono(11.sp, if (off) Rc.amberDim else Rc.amber), maxLines = 1)
+            Text(line1, style = mono(15.sp, if (off) Rc.amberDim else Rc.amber), maxLines = 1)
             Spacer(GlanceModifier.defaultWeight())
             Row(GlanceModifier.fillMaxWidth()) {
                 val vol = if (off) "--" else (s.volume?.let { "VOL $it" + if (s.sinkMuted) " MUTED" else "" } ?: "VOL --") + "  WS ${s.ws ?: "-"}"
-                Text(vol, style = mono(11.sp, Rc.amberDim), maxLines = 1)
+                Text(vol, style = mono(14.sp, Rc.amberDim), maxLines = 1)
                 Spacer(GlanceModifier.defaultWeight())
                 val out = when { off -> "--"; s.listening -> "PHONE ONLY"; else -> shortOutput(s.outputs.firstOrNull { it.active }?.name.orEmpty()) }
-                Text(out, style = mono(11.sp, Rc.amberDim), maxLines = 1)
+                Text(out, style = mono(14.sp, Rc.amberDim), maxLines = 1)
             }
         }
         // BACK · HOME · ENTER · MIC
-        Row(GlanceModifier.fillMaxWidth().padding(top = 12.dp).height(32.dp)) {
+        Row(GlanceModifier.fillMaxWidth().padding(top = 12.dp).height(44.dp)) {
             SmallKey("BACK", GlanceModifier.defaultWeight().fillMaxHeight(), act(op("key", "esc")), dead = off)
             Spacer(GlanceModifier.width(8.dp))
             SmallKey("HOME", GlanceModifier.defaultWeight().fillMaxHeight(), act(op("key", "super")), dead = off)
@@ -181,7 +186,7 @@ private fun Handset(ctx: Context, s: RemoteSnap, sending: Boolean) {
                 .let { m -> if (off) m else m.clickable(actionStartActivity(stickIntent(ctx))) }, contentAlignment = Alignment.Center) {
                 Image(ImageProvider(R.drawable.rc_well), null, contentScale = ContentScale.Fit, modifier = GlanceModifier.fillMaxSize())
                 Box(GlanceModifier.size(RcGeom.CAP_DP.dp).background(ImageProvider(R.drawable.rc_cap)), contentAlignment = Alignment.Center) {
-                    Text(if (off) "" else "TAP", style = mono(9.sp, Rc.faint, center = true))
+                    Text(if (off) "" else "TAP", style = mono(13.sp, Rc.faint, center = true))
                 }
             }
             Row(GlanceModifier.fillMaxWidth().padding(top = RcGeom.LR_GAP_DP.dp).height(RcGeom.LR_H_DP.dp)) {
@@ -191,17 +196,17 @@ private fun Handset(ctx: Context, s: RemoteSnap, sending: Boolean) {
             }
         }
         // VOL · MUTE + transport · CH
-        Row(GlanceModifier.fillMaxWidth().padding(top = 12.dp).height(110.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(GlanceModifier.fillMaxWidth().padding(top = 12.dp).height(140.dp), verticalAlignment = Alignment.CenterVertically) {
             Rocker("+", "VOL", "−", act(op("vol", "5")), act(op("vol", "-5")), off)
             Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                SmallKey("MUTE", GlanceModifier.width(72.dp).height(34.dp), act(op("mute")), dead = off, lit = s.sinkMuted)
+                SmallKey("MUTE", GlanceModifier.width(110.dp).height(46.dp), act(op("mute")), dead = off, lit = s.sinkMuted)
                 Spacer(GlanceModifier.height(10.dp))
                 Row {
-                    IconKey(R.drawable.w_prev, "Previous", 44.dp, act(op("media", "previous")), off)
+                    IconKey(R.drawable.w_prev, "Previous", 62.dp, act(op("media", "previous")), off)
                     Spacer(GlanceModifier.width(8.dp))
-                    IconKey(if (s.playing) R.drawable.w_pause else R.drawable.w_play, "Play or pause", 52.dp, act(op("media", "play-pause")), off)
+                    IconKey(if (s.playing) R.drawable.w_pause else R.drawable.w_play, "Play or pause", 76.dp, act(op("media", "play-pause")), off)
                     Spacer(GlanceModifier.width(8.dp))
-                    IconKey(R.drawable.w_next, "Next", 44.dp, act(op("media", "next")), off)
+                    IconKey(R.drawable.w_next, "Next", 62.dp, act(op("media", "next")), off)
                 }
             }
             Rocker("▲", "CH", "▼", act(op("ch", "1")), act(op("ch", "-1")), off)
@@ -223,11 +228,11 @@ private fun Handset(ctx: Context, s: RemoteSnap, sending: Boolean) {
         // the maker's mark
         Column(GlanceModifier.fillMaxWidth().padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(ImageProvider(R.drawable.emblem), "Archon", colorFilter = ColorFilter.tint(Rc.red), modifier = GlanceModifier.size(16.dp))
-                Spacer(GlanceModifier.width(7.dp))
-                Text("A R C H O N", style = mono(12.sp, Rc.red, bold = true))
+                Image(ImageProvider(R.drawable.emblem), "Archon", colorFilter = ColorFilter.tint(Rc.red), modifier = GlanceModifier.size(20.dp))
+                Spacer(GlanceModifier.width(8.dp))
+                Text("A R C H O N", style = mono(16.sp, Rc.red, bold = true))
             }
-            Text("${Deck.host} · LT-01", style = mono(8.sp, Rc.faint, center = true))
+            Text("${Deck.host} · LT-01", style = mono(11.sp, Rc.faint, center = true))
         }
     }
 }
@@ -238,22 +243,22 @@ private fun GlanceModifier.tap(a: Action?) = if (a == null) this else clickable(
 private fun SmallKey(label: String, modifier: GlanceModifier, a: Action?, dead: Boolean = false, lit: Boolean = false) {
     Box(modifier.background(ImageProvider(when { dead -> R.drawable.rc_key_dead; lit -> R.drawable.rc_key_lit; else -> R.drawable.rc_key_small })).tap(a),
         contentAlignment = Alignment.Center) {
-        Text(label, style = mono(10.sp, when { dead -> Rc.dead; lit -> Rc.red; else -> Rc.dim }, center = true), maxLines = 1)
+        Text(label, style = mono(14.sp, when { dead -> Rc.dead; lit -> Rc.red; else -> Rc.dim }, center = true), maxLines = 1)
     }
 }
 
 @Composable
 private fun BigKey(label: String, modifier: GlanceModifier, a: Action?, dead: Boolean) {
     Box(modifier.background(ImageProvider(if (dead) R.drawable.rc_key_dead else R.drawable.rc_key)).tap(a), contentAlignment = Alignment.Center) {
-        Text(label, style = mono(15.sp, if (dead) Rc.dead else Rc.on, center = true))
+        Text(label, style = mono(22.sp, if (dead) Rc.dead else Rc.on, center = true))
     }
 }
 
 @Composable
 private fun IconKey(icon: Int, label: String, w: Dp, a: Action?, dead: Boolean) {
-    Box(GlanceModifier.width(w).height(34.dp).background(ImageProvider(if (dead) R.drawable.rc_key_dead else R.drawable.rc_rocker)).tap(a),
+    Box(GlanceModifier.width(w).height(46.dp).background(ImageProvider(if (dead) R.drawable.rc_key_dead else R.drawable.rc_rocker)).tap(a),
         contentAlignment = Alignment.Center) {
-        Image(ImageProvider(icon), label, colorFilter = ColorFilter.tint(if (dead) Rc.dead else Rc.on), modifier = GlanceModifier.size(16.dp))
+        Image(ImageProvider(icon), label, colorFilter = ColorFilter.tint(if (dead) Rc.dead else Rc.on), modifier = GlanceModifier.size(22.dp))
     }
 }
 
@@ -261,20 +266,20 @@ private fun IconKey(icon: Int, label: String, w: Dp, a: Action?, dead: Boolean) 
 @Composable
 private fun Rocker(up: String, label: String, down: String, aUp: Action?, aDown: Action?, dead: Boolean) {
     val fg = if (dead) Rc.dead else Rc.on
-    Column(GlanceModifier.width(50.dp).fillMaxHeight().background(ImageProvider(if (dead) R.drawable.rc_key_dead else R.drawable.rc_rocker)),
+    Column(GlanceModifier.width(64.dp).fillMaxHeight().background(ImageProvider(if (dead) R.drawable.rc_key_dead else R.drawable.rc_rocker)),
         horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(GlanceModifier.fillMaxWidth().defaultWeight().tap(aUp), contentAlignment = Alignment.Center) { Text(up, style = mono(17.sp, fg, center = true)) }
-        Text(label, style = mono(9.sp, if (dead) Rc.dead else Rc.dim, center = true))
-        Box(GlanceModifier.fillMaxWidth().defaultWeight().tap(aDown), contentAlignment = Alignment.Center) { Text(down, style = mono(17.sp, fg, center = true)) }
+        Box(GlanceModifier.fillMaxWidth().defaultWeight().tap(aUp), contentAlignment = Alignment.Center) { Text(up, style = mono(24.sp, fg, center = true)) }
+        Text(label, style = mono(13.sp, if (dead) Rc.dead else Rc.dim, center = true))
+        Box(GlanceModifier.fillMaxWidth().defaultWeight().tap(aDown), contentAlignment = Alignment.Center) { Text(down, style = mono(24.sp, fg, center = true)) }
     }
 }
 
 @Composable
 private fun RowScope.ColourKey(bar: Int, label: String, a: Action?, dead: Boolean) {
     Column(GlanceModifier.defaultWeight().tap(a), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(GlanceModifier.fillMaxWidth().height(16.dp).background(ImageProvider(bar))) {}
+        Box(GlanceModifier.fillMaxWidth().height(22.dp).background(ImageProvider(bar))) {}
         Spacer(GlanceModifier.height(4.dp))
-        Text(label, style = mono(8.sp, if (dead) Rc.dead else Rc.dim, center = true), maxLines = 1)
+        Text(label, style = mono(12.sp, if (dead) Rc.dead else Rc.dim, center = true), maxLines = 1)
     }
 }
 
