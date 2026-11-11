@@ -1,121 +1,134 @@
 package dev.kondraki.archon
 
+import android.content.Context
+import android.hardware.biometrics.BiometricManager
+import android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG
+import android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+import android.hardware.biometrics.BiometricPrompt
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.SystemClock
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import dev.kondraki.archon.data.Deck
-import dev.kondraki.archon.ui.Chakra
+import dev.kondraki.archon.data.Palette
+import dev.kondraki.archon.ui.LocalPh
+import dev.kondraki.archon.ui.Opening
 import dev.kondraki.archon.ui.Phosphor
-import dev.kondraki.archon.ui.Plex
-import kotlinx.coroutines.delay
+import dev.kondraki.archon.ui.PinScreen
+import dev.kondraki.archon.ui.Shell
+import dev.kondraki.archon.ui.crt
+import kotlinx.coroutines.launch
 
-/** Phase 1 step 1 (tasks #120): the toolchain proof. Archon's opening screen, coloured from the
- *  live GET /palette, which proves the build, the tailnet and the new endpoint in one go. */
+/**
+ * One activity: PIN (first run) → fingerprint (the Archon opening screen) → the shell.
+ * The fingerprint gates the UI on a cold start and after 5 minutes in the background; the
+ * live /ws connection runs only while the activity is visible.
+ */
 class MainActivity : ComponentActivity() {
+    private val locked = mutableStateOf(true)
+    private val ph = mutableStateOf(Phosphor())
+    private var stoppedAt = 0L
+    private var prompting = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())          // fullscreen, like the PWA
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
-        setContent { Opening() }
-    }
-}
-
-private sealed interface Link {
-    data object Connecting : Link
-    data class Online(val ph: Phosphor) : Link
-    data class Offline(val why: String) : Link
-}
-
-@Composable
-private fun Opening() {
-    var link by remember { mutableStateOf<Link>(Link.Connecting) }
-    LaunchedEffect(Unit) {
-        while (true) {                                          // 'connect first': keep trying
-            link = runCatching { Link.Online(Phosphor.from(Deck.palette())) }
-                .getOrElse { Link.Offline(it.message ?: it.javaClass.simpleName) }
-            if (link is Link.Online) break
-            delay(3000)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)   // the PWA's wake lock
+        cachedPalette()?.let { ph.value = Phosphor.from(it) }
+        // Debug builds only: adb can hand over a token and skip the fingerprint, so the app can
+        // be driven over adb. Release builds compile this out (BuildConfig.DEBUG is a constant).
+        if (BuildConfig.DEBUG) {
+            intent.getStringExtra("token")?.let { Deck.session.adopt(it) }
+            if (intent.getBooleanExtra("unlocked", false)) locked.value = false
         }
-    }
-    val ph = (link as? Link.Online)?.ph ?: Phosphor()
-    val status = when (val l = link) {
-        Link.Connecting -> "${Deck.host} · CONNECTING"
-        is Link.Online -> "${Deck.host} · ONLINE"
-        is Link.Offline -> "${Deck.host} · OFFLINE"
-    }
-    val statusColor = if (link is Link.Offline) ph.secondary else ph.onVar
 
-    Box(
-        Modifier.fillMaxSize().background(ph.bg).crt(ph.crt),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Image(
-                painterResource(R.drawable.emblem), contentDescription = null,
-                modifier = Modifier.size(132.dp), colorFilter = ColorFilter.tint(ph.primary),
-            )
-            Text(
-                "ARCHON",
-                style = TextStyle(
-                    fontFamily = Chakra, fontWeight = FontWeight.Bold, fontSize = 38.sp,
-                    letterSpacing = 12.sp, color = ph.primary,
-                    shadow = Shadow(ph.primary.copy(alpha = 0.6f), Offset.Zero, 24f),
-                ),
-            )
-            Text(status, style = TextStyle(fontFamily = Plex, fontSize = 11.sp, letterSpacing = 3.sp, color = statusColor))
-            (link as? Link.Offline)?.let {
-                Text(it.why, style = TextStyle(fontFamily = Plex, fontSize = 10.sp, color = ph.onVar.copy(alpha = 0.7f)))
+        setContent {
+            val token by Deck.session.token.collectAsState()
+            val link by Deck.link.collectAsState()
+            val state by Deck.state.collectAsState()
+            val isLocked by locked
+            LaunchedEffect(token) { if (token != null) Deck.session.refreshIfDue() }
+            CompositionLocalProvider(LocalPh provides ph.value) {
+                Box(Modifier.fillMaxSize().crt(ph.value.crt)) {
+                    when {
+                        token == null -> PinScreen()
+                        isLocked -> Opening(link) { askFingerprint() }
+                        else -> Shell(state, link)
+                    }
+                }
             }
         }
     }
-}
 
-/** The CRT overlay the PWA draws with body::before/::after: scanlines + a vignette. Off when the
- *  System → Theme CRT switch is off (palette.crt). */
-private fun Modifier.crt(on: Boolean): Modifier = if (!on) this else drawWithContent {
-    drawContent()
-    val line = Color.Black.copy(alpha = 0.10f)
-    var y = 2f
-    while (y < size.height) {
-        drawLine(line, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
-        y += 3f
+    override fun onStart() {
+        super.onStart()
+        if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_MS) locked.value = true
+        Deck.start()
+        lifecycleScope.launch { runCatching { Deck.palette() }.onSuccess { savePalette(it); ph.value = Phosphor.from(it) } }
     }
-    drawRect(
-        Brush.radialGradient(
-            0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.55f),
-            center = center, radius = size.maxDimension * 0.62f,
-        ),
-    )
+
+    override fun onResume() {
+        super.onResume()
+        if (locked.value && Deck.session.token.value != null) askFingerprint()
+    }
+
+    override fun onStop() {
+        stoppedAt = SystemClock.elapsedRealtime()
+        Deck.stop()
+        super.onStop()
+    }
+
+    /** Android's own fingerprint sheet ("Unlock Archon"), falling back to the phone's PIN. A
+     *  phone with no lock screen set up has nothing to ask, so it just opens. */
+    private fun askFingerprint() {
+        if (prompting || !locked.value) return
+        val auth = BIOMETRIC_STRONG or DEVICE_CREDENTIAL
+        if (getSystemService(BiometricManager::class.java).canAuthenticate(auth) != BiometricManager.BIOMETRIC_SUCCESS) {
+            locked.value = false; return
+        }
+        prompting = true
+        BiometricPrompt.Builder(this)
+            .setTitle("Unlock Archon")
+            .setSubtitle("Use your fingerprint")
+            .setAllowedAuthenticators(auth)
+            .build()
+            .authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    prompting = false; locked.value = false
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    prompting = false                        // cancelled: stay on the opening screen; tap the emblem
+                }
+            })
+    }
+
+    // The last palette, so a cold start paints the right colours before /palette answers.
+    private fun cachedPalette(): Palette? = runCatching {
+        getSharedPreferences("ui", Context.MODE_PRIVATE).getString("palette", null)
+            ?.let { Deck.json.decodeFromString(Palette.serializer(), it) }
+    }.getOrNull()
+
+    private fun savePalette(p: Palette) {
+        getSharedPreferences("ui", Context.MODE_PRIVATE).edit()
+            .putString("palette", Deck.json.encodeToString(Palette.serializer(), p)).apply()
+    }
+
+    private companion object { const val RELOCK_MS = 5 * 60 * 1000L }
 }
