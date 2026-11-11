@@ -228,3 +228,12 @@ fun CardTitle(text: String) {
         Box(Modifier.weight(1f).height(1.dp).background(ph.outline.copy(alpha = 0.7f)))
     }
 }
+
+/** box-shadow 0 0 Npx colour around a rectangular control. */
+fun Modifier.boxGlow(color: Color, radius: Dp, alpha: Float = 0.45f): Modifier = drawBehind {
+    val r = radius.toPx()
+    drawRoundRect(Brush.radialGradient(listOf(color.copy(alpha = alpha), Color.Transparent),
+        center = center, radius = size.maxDimension / 2 + r),
+        topLeft = Offset(-r, -r), size = androidx.compose.ui.geometry.Size(size.width + 2 * r, size.height + 2 * r),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(r))
+}

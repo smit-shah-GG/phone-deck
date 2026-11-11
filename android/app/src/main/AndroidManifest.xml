@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -40,10 +42,9 @@
             <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
             <meta-data android:name="android.service.quicksettings.TILE_CATEGORY" android:value="android.service.quicksettings.CATEGORY_DISPLAY" />
         </service>
-        <!-- R0 probe (tasks #118), kept until phase 2 replaces it: start with adb am start. -->
-        <activity android:name=".rtcprobe.ProbeActivity" android:exported="true"
-            android:screenOrientation="sensorLandscape" />
-        <service android:name=".rtcprobe.ProbeService" android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+        <!-- The stream (tasks #122): owns the WebRTC session so audio and the phone mic survive the
+             screen locking; carries the lock-screen player. -->
+        <service android:name=".stream.StreamService" android:exported="false"
+            android:foregroundServiceType="mediaPlayback|microphone" />
     </application>
 </manifest>

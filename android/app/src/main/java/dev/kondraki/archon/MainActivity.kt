@@ -26,6 +26,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import dev.kondraki.archon.data.Deck
+import dev.kondraki.archon.stream.StreamEngine
 import dev.kondraki.archon.data.Palette
 import dev.kondraki.archon.ui.LocalPh
 import dev.kondraki.archon.ui.Opening
@@ -91,7 +92,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_MS) locked.value = true
-        Deck.start()
+        Deck.hold("ui")
+        StreamEngine.setVisible(true)
         lifecycleScope.launch { if (Deck.session.token.value != null) runCatching { ShortcutActivity.refresh(this@MainActivity) } }
         lifecycleScope.launch { runCatching { Deck.palette() }.onSuccess { savePalette(it); ph.value = Phosphor.from(it) } }
     }
@@ -103,7 +105,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         stoppedAt = SystemClock.elapsedRealtime()
-        Deck.stop()
+        Deck.release("ui")
+        StreamEngine.setVisible(false)        // no surface shows the video now: drop it, keep audio (#122)
         super.onStop()
     }
 

@@ -78,8 +78,13 @@ object Deck {
     private var socket: WebSocket? = null
     private var loop: Job? = null
 
-    /** Hold /ws open while the app is in the foreground; reconnect every 2 s like app.js. */
-    fun start() {
+    /** /ws stays open while anyone holds it: the app on screen ("ui") and the stream service
+     *  ("stream", for the player's now playing). Reconnects every 2 s like app.js. */
+    private val holders = mutableSetOf<String>()
+    @Synchronized fun hold(who: String) { holders += who; start() }
+    @Synchronized fun release(who: String) { holders -= who; if (holders.isEmpty()) stop() }
+
+    private fun start() {
         if (loop?.isActive == true) return
         loop = scope.launch {
             while (true) {
@@ -108,7 +113,7 @@ object Deck {
         }
     }
 
-    fun stop() {
+    private fun stop() {
         loop?.cancel(); loop = null
         socket?.close(1000, "background"); socket = null
         _link.value = Link.CONNECTING
