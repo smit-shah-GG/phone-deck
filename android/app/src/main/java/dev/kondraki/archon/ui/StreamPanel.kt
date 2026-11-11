@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,11 +26,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,7 +40,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import dev.kondraki.archon.data.Deck
 import dev.kondraki.archon.data.list
@@ -54,8 +50,6 @@ import dev.kondraki.archon.stream.StreamEngine
 import dev.kondraki.archon.stream.StreamOpts
 import dev.kondraki.archon.stream.StreamService
 import kotlinx.serialization.json.JsonObject
-import org.webrtc.RendererCommon
-import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 
 /** Remembered stream options (#122 decision 3). */
@@ -155,7 +149,8 @@ fun StreamPanel(state: JsonObject?) {
     }
 }
 
-/** The stage: the rig's screen when video is on, the ▛ STREAM ▟ placeholder otherwise. */
+/** The stage: the rig's screen when video is on (touch-on-video live), the ▛ STREAM ▟
+ *  placeholder otherwise; ⛶ enters focus mode. */
 @Composable
 private fun Stage(track: VideoTrack?, modifier: Modifier) {
     val ph = LocalPh.current
@@ -164,29 +159,11 @@ private fun Stage(track: VideoTrack?, modifier: Modifier) {
         if (track == null) {
             Mono("▛ STREAM ▟", 14.sp, ph.onVar.copy(alpha = 0.6f))
         } else {
-            val ctx = LocalContext.current
-            // the frame's real aspect, so the view letterboxes inside the stage instead of the
-            // SurfaceView filling it and cropping the picture (seen on the M52 2026-11-11)
-            var aspect by remember { mutableFloatStateOf(16f / 9f) }
-            val view = remember {
-                SurfaceViewRenderer(ctx).apply {
-                    init(StreamEngine.egl.eglBaseContext, object : RendererCommon.RendererEvents {
-                        override fun onFirstFrameRendered() {}
-                        override fun onFrameResolutionChanged(w: Int, h: Int, rotation: Int) {
-                            val (fw, fh) = if (rotation % 180 == 0) w to h else h to w
-                            if (fw > 0 && fh > 0) post { aspect = fw.toFloat() / fh }
-                        }
-                    })
-                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                    setEnableHardwareScaler(true)
-                }
-            }
-            DisposableEffect(track) {
-                track.addSink(view)
-                onDispose { track.removeSink(view) }
-            }
-            DisposableEffect(Unit) { onDispose { view.release() } }
-            AndroidView({ view }, Modifier.aspectRatio(aspect))
+            VideoSurface(track, crosshair = false)
+            val s = RoundedCornerShape(6.dp)
+            Box(Modifier.align(Alignment.TopEnd).padding(6.dp).clip(s).background(Color.Black.copy(alpha = 0.55f))
+                .border(1.dp, ph.primary.copy(alpha = 0.4f), s).tap { StreamUi.focus.value = true }
+                .padding(horizontal = 8.dp, vertical = 6.dp)) { Mono("⛶", 18.sp, ph.primary) }
         }
     }
 }

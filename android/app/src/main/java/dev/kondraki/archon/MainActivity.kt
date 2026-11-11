@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         stoppedAt = SystemClock.elapsedRealtime()
         Deck.release("ui")
+        dev.kondraki.archon.data.InputLink.close()
         StreamEngine.setVisible(false)        // no surface shows the video now: drop it, keep audio (#122)
         super.onStop()
     }

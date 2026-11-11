@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +68,11 @@ import java.util.Locale
 fun Shell(state: JsonObject?, link: Link) {
     val ph = LocalPh.current
     var panel by rememberSaveable { mutableStateOf<String?>(null) }      // null = home
+    val track by dev.kondraki.archon.stream.StreamEngine.video.collectAsState()
+    val focus by StreamUi.focus
+    LaunchedEffect(track) { if (track == null) StreamUi.focus.value = false }     // no video, no focus mode
+    val t = track
+    if (focus && t != null) { FocusStage(t); return }
     Column(Modifier.fillMaxSize().background(ph.bg)) {
         Band(state, link)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
