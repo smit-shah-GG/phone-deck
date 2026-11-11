@@ -76,6 +76,7 @@ fun Shell(state: JsonObject?, link: Link) {
                     when (val p = panel) {
                         null -> Home(state)
                         "audio" -> AudioPanel(state)
+                        "more" -> AboutPanel()          // phase 1: About; Files/Config/System join in phase 3
                         else -> NotPorted(p)
                     }
                 }
@@ -87,7 +88,7 @@ fun Shell(state: JsonObject?, link: Link) {
 
 private val PANELS = listOf("audio" to "Audio", "stream" to "Stream", "voice" to "Voice", "modes" to "Modes",
     "site19" to "Site-19", "remote" to "Remote")
-private val PHASE = mapOf("stream" to 2, "voice" to 3, "modes" to 3, "site19" to 3, "remote" to 3, "more" to 3)
+private val PHASE = mapOf("stream" to 2, "voice" to 3, "modes" to 3, "site19" to 3, "remote" to 3)
 
 @Composable
 private fun Band(state: JsonObject?, link: Link) {

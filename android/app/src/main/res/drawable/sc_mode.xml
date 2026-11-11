@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shortcut icon: the MODE glyph on a black disc, so it reads as Archon, not a system icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M24,0a24,24 0,1 0,0.01,0z" android:fillColor="#FF000000" />
+    <group android:translateX="12" android:translateY="12">
+        <path android:pathData="M4,4h16v16H4zM9,9h6v6H9z" android:strokeColor="#FFFFB000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
+</vector>

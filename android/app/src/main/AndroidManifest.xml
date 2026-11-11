@@ -24,6 +24,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Launcher shortcuts: fire one request, toast, close (no UI, never in recents). -->
+        <activity android:name=".ShortcutActivity" android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" />
+        <!-- Quick Settings tiles (canvas Main board). Listen joins with the stream in phase 2. -->
+        <service android:name=".tiles.RigMusicTile" android:exported="true" android:label="Rig music"
+            android:icon="@drawable/ic_tile_music" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+        </service>
+        <service android:name=".tiles.ScreensTile" android:exported="true" android:label="Screens"
+            android:icon="@drawable/ic_tile_screens" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+            <meta-data android:name="android.service.quicksettings.TILE_CATEGORY" android:value="android.service.quicksettings.CATEGORY_DISPLAY" />
+        </service>
         <!-- R0 probe (tasks #118), kept until phase 2 replaces it: start with adb am start. -->
         <activity android:name=".rtcprobe.ProbeActivity" android:exported="true"
             android:screenOrientation="sensorLandscape" />

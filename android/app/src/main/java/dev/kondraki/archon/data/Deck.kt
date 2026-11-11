@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -122,12 +123,22 @@ object Deck {
         }.getOrDefault(false)
     }
 
-    /** GET a JSON object (brightness levels, context config); null on any failure. */
-    suspend fun getJson(path: String): JsonObject? = withContext(Dispatchers.IO) {
+    /** GET JSON (brightness levels, context config, /state, /modes); null on any failure. */
+    suspend fun getElement(path: String): JsonElement? = withContext(Dispatchers.IO) {
         runCatching {
             http.newCall(Request.Builder().url("$url$path").build()).execute().use { r ->
-                if (r.isSuccessful) json.parseToJsonElement(r.body.string()).jsonObject else null
+                if (r.isSuccessful) json.parseToJsonElement(r.body.string()) else null
             }
+        }.getOrNull()
+    }
+    suspend fun getJson(path: String): JsonObject? = getElement(path) as? JsonObject
+
+    /** POST and read the JSON answer ({"ok": …}); null when the deck can't be reached. */
+    suspend fun postJson(path: String, body: JsonObject = buildJsonObject { }): JsonObject? = withContext(Dispatchers.IO) {
+        runCatching {
+            http.newCall(Request.Builder().url("$url$path")
+                .post(body.toString().toRequestBody("application/json".toMediaType())).build())
+                .execute().use { r -> if (r.isSuccessful) json.parseToJsonElement(r.body.string()) as? JsonObject else null }
         }.getOrNull()
     }
 

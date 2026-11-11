@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_MS) locked.value = true
         Deck.start()
+        lifecycleScope.launch { if (Deck.session.token.value != null) runCatching { ShortcutActivity.refresh(this@MainActivity) } }
         lifecycleScope.launch { runCatching { Deck.palette() }.onSuccess { savePalette(it); ph.value = Phosphor.from(it) } }
     }
 
