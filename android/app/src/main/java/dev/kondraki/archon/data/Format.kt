@@ -94,3 +94,15 @@ fun loginOutcome(code: Int, location: String?, setCookies: List<String>, cookieN
     }
     return if (location == "/" && !token.isNullOrEmpty()) LoginResult.Ok(token) else LoginResult.Failed("no session cookie")
 }
+
+/** An NFC tag's ID the way Web NFC's serialNumber reads it (and site19.json stores it):
+ *  lowercase hex bytes joined by colons, e.g. "0a:b1:…". */
+fun nfcUid(id: ByteArray): String = id.joinToString(":") { "%02x".format(it.toInt() and 0xff) }
+
+/** The Site-19 result line, as app.js words it. */
+fun site19Line(ok: Boolean?, denied: Boolean, uid: String, offline: Boolean): String = when {
+    offline -> "✗ Rig offline — no crossing."
+    denied -> "Access denied — unrecognized tag (${uid.ifEmpty { "no UID" }})."
+    ok == true -> "◈ Crossing complete — tap the card again to withdraw."
+    else -> "✗ Controller error — see output."
+}

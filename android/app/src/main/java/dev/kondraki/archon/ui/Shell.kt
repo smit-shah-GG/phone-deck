@@ -85,6 +85,7 @@ fun Shell(state: JsonObject?, link: Link) {
                         "stream" -> StreamPanel(state)
                         "modes" -> ModesPanel()
                         "voice" -> VoicePanel()
+                        "site19" -> Site19Panel()
                         "remote" -> RemotePanel()
                         "system" -> SystemPanel(state) { panel = "more" }
                         "config" -> ConfigPanel { panel = "more" }
@@ -101,7 +102,7 @@ fun Shell(state: JsonObject?, link: Link) {
 
 private val PANELS = listOf("audio" to "Audio", "stream" to "Stream", "voice" to "Voice", "modes" to "Modes",
     "site19" to "Site-19", "remote" to "Remote")
-private val PHASE = mapOf("site19" to 3)
+private val PHASE = emptyMap<String, Int>()
 private val SUB = mapOf("files" to "Files", "config" to "Config", "system" to "System")   // under More (PANEL_PARENT)
 
 @Composable

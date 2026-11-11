@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <application
         android:name=".ArchonApp"
         android:label="@string/app_name"
@@ -30,6 +32,16 @@
         </activity>
         <!-- The PiP window's buttons (mic / stop); not exported: only the system PiP menu fires them. -->
         <receiver android:name=".stream.PipActions" android:exported="false" />
+        <!-- Site-19 tap-anywhere (#123 A): any NfcA tag (the Level-5 card is NTAG, 7-byte UID) with
+             the phone unlocked → its UID to POST /site19/toggle. Other tags are fine (user). -->
+        <activity android:name=".Site19Tap" android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.nfc.action.TECH_DISCOVERED" />
+            </intent-filter>
+            <meta-data android:name="android.nfc.action.TECH_DISCOVERED" android:resource="@xml/nfc_tech" />
+        </activity>
         <!-- Launcher shortcuts: fire one request, toast, close (no UI, never in recents). -->
         <activity android:name=".ShortcutActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"

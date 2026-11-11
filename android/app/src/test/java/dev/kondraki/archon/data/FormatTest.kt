@@ -66,4 +66,16 @@ class FormatTest {
         assertTrue(loginOutcome(500, null, emptyList()) is LoginResult.Failed)
         assertTrue(loginOutcome(303, "/", emptyList()) is LoginResult.Failed)
     }
+
+    @Test fun nfcUidMatchesWebNfc() {
+        // made-up bytes (never the real card's UID: this repo is public)
+        assertEquals("0a:b1:c2:00:ff:10:80", nfcUid(byteArrayOf(0x0a, 0xb1.toByte(), 0xc2.toByte(), 0x00, 0xff.toByte(), 0x10, 0x80.toByte())))
+        assertEquals("", nfcUid(ByteArray(0)))
+    }
+
+    @Test fun site19Lines() {
+        assertEquals("Access denied — unrecognized tag (04:aa).", site19Line(false, true, "04:aa", false))
+        assertTrue(site19Line(true, false, "x", false).startsWith("◈ Crossing complete"))
+        assertTrue(site19Line(false, false, "x", true).contains("offline"))
+    }
 }
