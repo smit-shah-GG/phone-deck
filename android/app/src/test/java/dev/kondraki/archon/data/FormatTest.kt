@@ -78,4 +78,22 @@ class FormatTest {
         assertTrue(site19Line(true, false, "x", false).startsWith("◈ Crossing complete"))
         assertTrue(site19Line(false, false, "x", true).contains("offline"))
     }
+
+    @Test fun shareOutcomes() {
+        assertEquals(ShareOutcome(true, "SENT → LIGHTNING", "→ rig clipboard"),
+            shareOutcome(200, j("""{"ok":true,"action":"copy","detail":"→ rig clipboard"}"""), "lightning"))
+        assertEquals("RIG UNREACHABLE", shareOutcome(0, null, "lightning").head)
+        assertEquals("NOT SIGNED IN", shareOutcome(401, j("""{"detail":"auth required"}"""), "lightning").head)
+        assertEquals(ShareOutcome(false, "SHARE FAILED", "empty share"),
+            shareOutcome(200, j("""{"ok":false,"action":"none","detail":"empty share"}"""), "lightning"))
+        assertEquals("HTTP 500", shareOutcome(500, null, "lightning").detail)
+    }
+
+    @Test fun shareWhatLines() {
+        assertEquals("clip.mp4 · 34.0 MB", shareWhat("", listOf("clip.mp4"), 34L * 1048576))
+        assertEquals("3 files · 12 KB", shareWhat("", listOf("a", "b", "c"), 12 * 1024))
+        assertEquals("a link https://x.y", shareWhat("  a link\n https://x.y ", emptyList(), 0))
+        assertEquals(60, shareWhat("x".repeat(80), emptyList(), 0).length)
+        assertEquals("doc.pdf", shareWhat("", listOf("doc.pdf"), -1))
+    }
 }

@@ -106,3 +106,31 @@ fun site19Line(ok: Boolean?, denied: Boolean, uid: String, offline: Boolean): St
     ok == true -> "◈ Crossing complete — tap the card again to withdraw."
     else -> "✗ Controller error — see output."
 }
+
+/** What the share card says once /share/api answers (the PWA's sw.js sharePage wording).
+ *  code 0 = no answer at all (rig unreachable or timed out). */
+data class ShareOutcome(val ok: Boolean, val head: String, val detail: String)
+
+fun shareOutcome(code: Int, body: JsonObject?, host: String): ShareOutcome = when {
+    code == 0 -> ShareOutcome(false, "RIG UNREACHABLE", "check Tailscale and the deck service")
+    code == 401 -> ShareOutcome(false, "NOT SIGNED IN", "open Archon and sign in, then share again")
+    body?.bool("ok") == true -> ShareOutcome(true, "SENT → ${host.uppercase()}", body.str("detail").orEmpty())
+    else -> ShareOutcome(false, "SHARE FAILED", body?.str("detail") ?: "HTTP $code")
+}
+
+/** The card's "what's going" line: the text itself, one file's name, or a count; plus the size. */
+fun shareWhat(text: String, names: List<String>, bytes: Long): String {
+    val size = if (bytes > 0) " · " + sizeLine(bytes) else ""
+    return when {
+        names.size == 1 -> names[0] + size
+        names.size > 1 -> "${names.size} files$size"
+        else -> text.trim().replace(Regex("\\s+"), " ").let { if (it.length > 60) it.take(59) + "…" else it }
+    }
+}
+
+fun sizeLine(bytes: Long): String = when {
+    bytes >= 1L shl 30 -> String.format(java.util.Locale.US, "%.2f GB", bytes / 1073741824.0)
+    bytes >= 1L shl 20 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576.0)
+    bytes >= 1L shl 10 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
+}

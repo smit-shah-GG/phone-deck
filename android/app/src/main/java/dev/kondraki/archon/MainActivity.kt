@@ -111,7 +111,8 @@ class MainActivity : ComponentActivity() {
         if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_MS) locked.value = true
         Deck.hold("ui")
         StreamEngine.setVisible(true)
-        lifecycleScope.launch { if (Deck.session.token.value != null) runCatching { ShortcutActivity.refresh(this@MainActivity) } }
+        lifecycleScope.launch { if (Deck.session.token.value != null) runCatching { ShortcutActivity.refresh(this@MainActivity) }
+            .onFailure { android.util.Log.w("archon", "shortcuts not refreshed", it) } }
         lifecycleScope.launch { Skin.refresh(this@MainActivity) }
     }
 

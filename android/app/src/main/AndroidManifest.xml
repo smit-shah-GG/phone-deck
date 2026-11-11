@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -28,6 +29,23 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity>
+        <!-- Send to rig (#123 E): any text or file(s) from the share sheet → a small card over the
+             sending app → POST /share/api. No screenOrientation: it floats over portrait apps too. -->
+        <activity android:name=".ShareActivity" android:exported="true" android:label="Send to rig"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true" android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
         <!-- The PiP window's buttons (mic / stop); not exported: only the system PiP menu fires them. -->
@@ -67,5 +85,8 @@
              screen locking; carries the lock-screen player. -->
         <service android:name=".stream.StreamService" android:exported="false"
             android:foregroundServiceType="mediaPlayback|microphone" />
+        <!-- File shares upload here, so leaving the share card or locking the phone doesn't stop them. -->
+        <service android:name=".share.ShareService" android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

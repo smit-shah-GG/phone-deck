@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Direct share (#123 E4): the dynamic 'lightning' shortcut (ShortcutActivity.shareTarget)
+     carries this category, so the share sheet offers it in its top row → ShareActivity. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <share-target android:targetClass="dev.kondraki.archon.ShareActivity">
+        <data android:mimeType="*/*" />
+        <category android:name="dev.kondraki.archon.category.SEND_TO_RIG" />
+    </share-target>
+</shortcuts>

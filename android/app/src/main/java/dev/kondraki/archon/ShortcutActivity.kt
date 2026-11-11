@@ -73,6 +73,20 @@ class ShortcutActivity : Activity() {
     companion object {
         /** Rebuild the dynamic shortcuts (canvas order): Listen, the first two modes from
          *  GET /modes, Lock rig. Called whenever the app comes to the foreground. */
+        /** Direct share (#123 E4): 'Send to lightning' in the share sheet's top row, matched to
+         *  ShareActivity by res/xml/shortcuts.xml's share-target category; long-lived so Android
+         *  can rank it. NOT excluded from the launcher: measured on One UI 5 (Android 13),
+         *  setExcludedFromSurfaces(SURFACE_LAUNCHER) drops it from the share sheet too, so it also
+         *  shows in the long-press menu (where it just opens Archon). */
+        private fun shareTarget(ctx: Context): ShortcutInfo = ShortcutInfo.Builder(ctx, "share:rig")
+            .setShortLabel(Deck.host.lowercase()).setLongLabel("Send to ${Deck.host.lowercase()}")
+            .setIcon(Icon.createWithResource(ctx, R.mipmap.ic_launcher))
+            .setCategories(setOf(SHARE_CATEGORY)).setLongLived(true).setRank(10)
+            .setIntent(Intent(ctx, MainActivity::class.java).setAction(Intent.ACTION_MAIN))
+            .build()
+
+        const val SHARE_CATEGORY = "dev.kondraki.archon.category.SEND_TO_RIG"
+
         suspend fun refresh(ctx: Context) {
             val modes = (Deck.getElement("/modes") as? JsonArray)?.mapNotNull { it as? JsonObject } ?: return
             fun intent(doWhat: String, label: String? = null) = Intent(ctx, ShortcutActivity::class.java)
@@ -89,7 +103,9 @@ class ShortcutActivity : Activity() {
                     .setIcon(Icon.createWithResource(ctx, icon)).setRank(i + 1).setIntent(intent("mode:$id", label)).build()
             }.filterNotNull() + ShortcutInfo.Builder(ctx, "lock").setShortLabel("Lock rig").setLongLabel("Lock the rig")
                 .setIcon(Icon.createWithResource(ctx, R.drawable.sc_lock)).setRank(9).setIntent(intent("lock")).build()
-            ctx.getSystemService(ShortcutManager::class.java).dynamicShortcuts = list
+            // false = Android's rate limit (it resets when the app comes to the foreground)
+            if (!ctx.getSystemService(ShortcutManager::class.java).setDynamicShortcuts(list + shareTarget(ctx)))
+                android.util.Log.w("archon", "shortcuts rate-limited")
         }
     }
 }
