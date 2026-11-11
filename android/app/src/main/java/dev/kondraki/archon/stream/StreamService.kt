@@ -85,6 +85,14 @@ class StreamService : Service() {
         wifi = getSystemService(WifiManager::class.java).createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "archon:stream")
             .apply { setReferenceCounted(false); acquire() }
 
+        // the engine stopped from anywhere (tile, player, panel): the service goes with it
+        scope.launch {
+            var seenLive = false
+            StreamEngine.status.collect { st ->
+                if (st.phase != Phase.IDLE) seenLive = true
+                else if (seenLive && !StreamEngine.active) stopSelf()
+            }
+        }
         // repaint the player on any change of: stream status, mic mute, the rig's now playing
         scope.launch {
             combine(StreamEngine.status, StreamEngine.micMuted,

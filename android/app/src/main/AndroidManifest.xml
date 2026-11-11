@@ -30,7 +30,12 @@
         <activity android:name=".ShortcutActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" />
-        <!-- Quick Settings tiles (canvas Main board). Listen joins with the stream in phase 2. -->
+        <!-- Quick Settings tiles (canvas Main board). -->
+        <service android:name=".tiles.ListenTile" android:exported="true" android:label="Listen"
+            android:icon="@drawable/ic_tile_listen" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+        </service>
         <service android:name=".tiles.RigMusicTile" android:exported="true" android:label="Rig music"
             android:icon="@drawable/ic_tile_music" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
