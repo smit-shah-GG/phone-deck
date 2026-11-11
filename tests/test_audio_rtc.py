@@ -187,7 +187,8 @@ class _FakePC:
     instances = []
     gate_next = None                      # handed to the next pc: pauses setRemoteDescription
 
-    def __init__(self):
+    def __init__(self, configuration=None):
+        self.configuration = configuration
         self.closed, self.tracks, self.handlers = False, [], {}
         self.connectionState, self.iceGatheringState = "new", "complete"
         self.localDescription, self.gate = None, _FakePC.gate_next
@@ -305,3 +306,32 @@ def test_monitor_track_stop_reaps_its_process():
                                     wait=lambda timeout=None: calls.append("wait"))
     t.stop()
     assert calls == ["term", "wait"]                     # an unwaited parec stayed a zombie
+
+
+# ---- #106: no STUN, so the answer isn't held ~5 s by unreachable STUN servers ----
+
+def test_session_pc_gathers_host_candidates_only_and_fast():
+    import time
+    from aiortc import RTCPeerConnection
+
+    async def run():
+        client = RTCPeerConnection()
+        client.addTransceiver("audio", direction="recvonly")
+        await client.setLocalDescription(await client.createOffer())
+        pc, _ = audio_rtc._register("probe106")
+        try:
+            await pc.setRemoteDescription(client.localDescription)
+            t0 = time.monotonic()
+            await pc.setLocalDescription(await pc.createAnswer())
+            await audio_rtc._ice_complete(pc)
+            took = time.monotonic() - t0
+            sdp = pc.localDescription.sdp
+        finally:
+            audio_rtc._sessions.pop("probe106", None)
+            await pc.close()
+            await client.close()
+        return took, sdp
+
+    took, sdp = asyncio.run(run())
+    assert took < 1.0                                  # was 5.0 s with aiortc's default STUN
+    assert "typ host" in sdp and "typ srflx" not in sdp

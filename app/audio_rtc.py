@@ -23,7 +23,7 @@ from pathlib import Path
 
 import av
 import numpy
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.mediastreams import MediaStreamError, MediaStreamTrack
 
 from . import hypr
@@ -465,7 +465,12 @@ def _register(key: str) -> tuple[RTCPeerConnection, dict]:
     """Create a session's pc with auto-cleanup on death. The identity guard
     matters: a replaced session's late disconnect event must not kill its
     successor under the same key."""
-    pc = RTCPeerConnection()
+    # No STUN (tasks #106): aiortc's default asks stun.l.google.com from every interface,
+    # and the answer waited the full 5 s for the ones that can't reach it (docker
+    # bridges). That only finds the router's public IP, which no client can use anyway:
+    # the deck is only reachable over the tailnet, whose 100.x address is a host
+    # candidate. Measured 2026-11-11: gathering 5.00 s -> 0.00 s.
+    pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
     sess = {"pc": pc, "tracks": []}
     _sessions[key] = sess
 
@@ -547,6 +552,6 @@ async def handle_offer(sdp: str, type_: str, listen: bool = True, mic: bool = Fa
 
     await pc.setLocalDescription(await pc.createAnswer())
     await _ice_complete(pc)                        # non-trickle: answer once gathering done
-    if superseded():                              # the widest window: gathering takes ~5 s (#106)
+    if superseded():                              # gathering is near-instant since #106, but still yields
         return await _abandon(pc, sess)
     return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
