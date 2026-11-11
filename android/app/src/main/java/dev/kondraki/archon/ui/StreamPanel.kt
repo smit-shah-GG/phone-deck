@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -163,9 +165,18 @@ private fun Stage(track: VideoTrack?, modifier: Modifier) {
             Mono("▛ STREAM ▟", 14.sp, ph.onVar.copy(alpha = 0.6f))
         } else {
             val ctx = LocalContext.current
+            // the frame's real aspect, so the view letterboxes inside the stage instead of the
+            // SurfaceView filling it and cropping the picture (seen on the M52 2026-11-11)
+            var aspect by remember { mutableFloatStateOf(16f / 9f) }
             val view = remember {
                 SurfaceViewRenderer(ctx).apply {
-                    init(StreamEngine.egl.eglBaseContext, null)
+                    init(StreamEngine.egl.eglBaseContext, object : RendererCommon.RendererEvents {
+                        override fun onFirstFrameRendered() {}
+                        override fun onFrameResolutionChanged(w: Int, h: Int, rotation: Int) {
+                            val (fw, fh) = if (rotation % 180 == 0) w to h else h to w
+                            if (fw > 0 && fh > 0) post { aspect = fw.toFloat() / fh }
+                        }
+                    })
                     setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                     setEnableHardwareScaler(true)
                 }
@@ -175,7 +186,7 @@ private fun Stage(track: VideoTrack?, modifier: Modifier) {
                 onDispose { track.removeSink(view) }
             }
             DisposableEffect(Unit) { onDispose { view.release() } }
-            AndroidView({ view }, Modifier.fillMaxSize())
+            AndroidView({ view }, Modifier.aspectRatio(aspect))
         }
     }
 }
