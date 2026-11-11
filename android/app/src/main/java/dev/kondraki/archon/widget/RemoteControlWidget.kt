@@ -289,9 +289,15 @@ private fun RowScope.ColourKey(bar: Int, label: String, a: Action?, dead: Boolea
 private fun openApp(ctx: Context) = Intent(ctx, MainActivity::class.java).setData(Uri.parse("archon://remote/open"))
     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
+/** With "Display over other apps", the stick wakes as a floating window (StickOverlay, via a
+ *  broadcast); without it, as StickActivity. Chosen at each render; opening Archon re-renders. */
 private fun stickHit(ctx: Context) = android.widget.RemoteViews(ctx.packageName, R.layout.rc_stick_hit).apply {
-    setOnClickPendingIntent(R.id.rc_stick_hit, android.app.PendingIntent.getActivity(ctx, 7, stickIntent(ctx),
-        android.app.PendingIntent.FLAG_MUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT))
+    val flags = android.app.PendingIntent.FLAG_MUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+    setOnClickPendingIntent(R.id.rc_stick_hit,
+        if (dev.kondraki.archon.StickOverlay.allowed(ctx))
+            android.app.PendingIntent.getBroadcast(ctx, 8, Intent(ctx, dev.kondraki.archon.StickReceiver::class.java)
+                .setData(Uri.parse("archon://remote/stick-overlay")), flags)
+        else android.app.PendingIntent.getActivity(ctx, 7, stickIntent(ctx), flags))
 }
 
 private fun stickIntent(ctx: Context) = Intent(ctx, StickActivity::class.java).setData(Uri.parse("archon://remote/stick"))

@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.SystemClock
 import android.view.MotionEvent
+import androidx.glance.appwidget.updateAll
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -129,6 +130,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Cog.touched()                                             // coming back counts as activity
+        // redraw the Remote widget: its stick picks overlay vs activity by the overlay permission
+        lifecycleScope.launch { runCatching { dev.kondraki.archon.widget.RemoteControlWidget().updateAll(this@MainActivity) } }
         // the cogitator's idle timer (app.js: every 5 s), held off while voice records, the rig's
         // screen is showing (video), PiP, or the app is locked (#123 F)
         idleJob?.cancel()

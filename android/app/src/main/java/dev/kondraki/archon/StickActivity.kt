@@ -136,7 +136,7 @@ class StickActivity : ComponentActivity() {
     }
 }
 
-private fun send(t: String, body: JsonObjectBuilder.() -> Unit = {}) =
+internal fun send(t: String, body: JsonObjectBuilder.() -> Unit = {}) =
     InputLink.send(buildJsonObject { put("t", t); body() })
 
 private val RED = Color(0xFFFA4242)
@@ -144,7 +144,7 @@ private val KEY = Color(0xFF1C1414)
 private val KEY_EDGE = Color(0xFF2E1A1A)
 
 @Composable
-private fun Stick(stickHeightPx: Int, onTouch: () -> Unit, onLeft: (Boolean) -> Unit) {
+internal fun Stick(stickHeightPx: Int, onTouch: () -> Unit, onLeft: (Boolean) -> Unit) {
     val view = LocalView.current
     val density = LocalDensity.current.density
     var cap by remember { mutableStateOf(Offset.Zero) }          // where the thumb pulls the cap (px)

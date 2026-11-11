@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.NFC" />
+    <!-- the Remote widget's stick as a floating window (StickOverlay); optional, falls back to StickActivity -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <application
         android:name=".ArchonApp"
@@ -96,6 +98,8 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/rc_info" />
         </receiver>
+        <!-- The stick tap when "Display over other apps" is on: shows StickOverlay. -->
+        <receiver android:name=".StickReceiver" android:exported="false" />
         <!-- The remote's stick, awake: a small window over the widget's stick (no fingerprint, like
              the tiles; any outside touch, pause or 30 s idle ends it). -->
         <activity android:name=".StickActivity" android:exported="false"
