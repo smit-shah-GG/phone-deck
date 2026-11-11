@@ -83,6 +83,7 @@ fun Shell(state: JsonObject?, link: Link) {
                         null -> Home(state)
                         "audio" -> AudioPanel(state)
                         "stream" -> StreamPanel(state)
+                        "modes" -> ModesPanel()
                         "more" -> AboutPanel { panel = it }   // its launchers open Files / Config / System
                         else -> NotPorted(p) { panel = it }
                     }
@@ -95,7 +96,7 @@ fun Shell(state: JsonObject?, link: Link) {
 
 private val PANELS = listOf("audio" to "Audio", "stream" to "Stream", "voice" to "Voice", "modes" to "Modes",
     "site19" to "Site-19", "remote" to "Remote")
-private val PHASE = mapOf("voice" to 3, "modes" to 3, "site19" to 3, "remote" to 3,
+private val PHASE = mapOf("voice" to 3, "site19" to 3, "remote" to 3,
     "files" to 3, "config" to 3, "system" to 3)
 private val SUB = mapOf("files" to "Files", "config" to "Config", "system" to "System")   // under More (PANEL_PARENT)
 
