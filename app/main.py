@@ -273,6 +273,8 @@ async def action(payload: dict, _=Depends(auth.require_auth)):
 # ---- hyprland --------------------------------------------------------------
 @app.post("/hypr/workspace")
 async def hypr_workspace(payload: dict, _=Depends(auth.require_auth)):
+    if payload.get("rel"):                    # the home-screen remote's CH▲/▼
+        return JSONResponse({"ok": await hypr.focus_relative(int(payload["rel"]))})
     ws_id = int(payload.get("id"))
     ok = await (hypr.move_window_to_workspace(ws_id) if payload.get("move")
                 else hypr.focus_workspace(ws_id))
@@ -303,6 +305,8 @@ async def brightness_set(payload: dict, _=Depends(auth.require_auth)):
 # ---- audio / media ---------------------------------------------------------
 @app.post("/audio/volume")
 async def audio_volume(payload: dict, _=Depends(auth.require_auth)):
+    if "step" in payload:                     # the home-screen remote's VOL ±
+        return JSONResponse({"ok": await audio.step_volume(int(payload["step"]))})
     return JSONResponse({"ok": await audio.set_volume(int(payload.get("pct", 0)))})
 
 
@@ -552,6 +556,20 @@ async def _joy_input(msg: dict, ws: WebSocket) -> None:
         await hypr.move_cursor(round(_joy["pos"][0]), round(_joy["pos"][1]))
     fx, fy = joystick.frac(_joy["pos"], r)
     await ws.send_json({"t": "cur", "fx": fx, "fy": fy})
+
+
+@app.post("/input")
+async def input_once(payload: dict, _=Depends(auth.require_auth)):
+    # One discrete event over plain HTTP, for the home-screen remote's keys and L/R (a
+    # widget tap can't hold /ws/input open). Same event shapes as /ws/input; continuous
+    # ones (move, scroll) stay on the socket.
+    if payload.get("t") not in ("click", "key", "combo"):
+        return JSONResponse({"ok": False, "error": "unsupported event"}, status_code=400)
+    try:
+        hid.handle(payload)
+    except Exception:  # noqa: BLE001 — no uinput / no permission
+        return JSONResponse({"ok": False, "error": "virtual input unavailable"})
+    return JSONResponse({"ok": True})
 
 
 @app.websocket("/ws/input")

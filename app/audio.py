@@ -184,6 +184,22 @@ async def set_volume(pct: int) -> bool:
     return await _fire("pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{pct}%")
 
 
+def stepped(cur: int, step: int) -> int:
+    """The remote's VOL keys: one step, never pushed past 100 by a key (the app's slider can
+    go to 150, and a key press never pulls a louder setting back down to 100)."""
+    new = cur + step
+    if step > 0:
+        new = min(new, max(cur, 100))
+    return max(0, min(150, new))
+
+
+async def step_volume(step: int) -> bool:
+    m = _PCT.search(await _out("pactl", "get-sink-volume", "@DEFAULT_SINK@"))
+    if not m:
+        return False
+    return await set_volume(stepped(int(m.group(1)), int(step)))
+
+
 async def toggle_mute(target: str) -> bool:
     if target == "mic":
         return await _fire("pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle")

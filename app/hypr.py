@@ -156,6 +156,30 @@ PAD_PREFIX = "pad-"
 PAD_WS_BASE = 21
 
 
+def neighbour_ws(ids: list[int], cur: int | None, rel: int) -> int | None:
+    """The workspace CH▲/▼ lands on: the next / previous EXISTING one on the focused monitor
+    (like Hyprland's e+1 / e-1), wrapping around. Pad workspaces (ws21+) never count."""
+    pool = sorted({i for i in ids if 0 < i < PAD_WS_BASE} | ({cur} if cur and 0 < cur < PAD_WS_BASE else set()))
+    if not pool or cur not in pool:
+        return pool[0] if pool else None
+    return pool[(pool.index(cur) + (1 if rel > 0 else -1)) % len(pool)]
+
+
+async def focus_relative(rel: int) -> bool:
+    """CH▲/▼ on the home-screen remote. Computed here and sent through focus_workspace, the
+    dispatch path that already works on both the classic and the Lua compositor."""
+    mons = await _hyprctl_json("monitors") or []
+    mon = next((m for m in mons if m.get("focused")), None)
+    if not mon:
+        return False
+    cur = mon.get("activeWorkspace", {}).get("id")
+    wss = await _hyprctl_json("workspaces") or []
+    target = neighbour_ws([w["id"] for w in wss if w.get("monitor") == mon["name"]], cur, rel)
+    if target is None or target == cur:
+        return False
+    return await focus_workspace(target)
+
+
 def is_pad(name: str) -> bool:
     return name.startswith(PAD_PREFIX) or name.startswith("HEADLESS")
 
