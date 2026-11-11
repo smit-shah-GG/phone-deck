@@ -347,7 +347,9 @@ class RcAction : ActionCallback {
             op == "mode" -> toast(context, "${arg.substringAfter('|')} mode started")
             op == "lock" -> toast(context, "Rig locked")
         }
-        if (op == "media") delay(2500)                         // the deck re-reads audio every 2 s
+        // keep the optimistic face until the deck has re-read: it polls audio every 2 s, so an
+        // immediate GET /state returns the pre-press value and flips MUTE / VOL straight back
+        if (op in setOf("media", "mute", "mic", "vol", "source", "ch")) delay(2500)
         RemoteState.refresh(context)
     }
 }
