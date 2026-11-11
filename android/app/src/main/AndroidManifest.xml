@@ -7,14 +7,24 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <application android:label="archon·probe" android:theme="@android:style/Theme.Material.NoActionBar">
-        <activity android:name=".rtcprobe.ProbeActivity" android:exported="true"
-            android:screenOrientation="sensorLandscape">
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.Archon">
+        <!-- Landscape only, like the PWA (locked 2026-11-11). configChanges keeps the activity
+             alive across a 180° flip instead of recreating it (the probe's double start). -->
+        <activity android:name=".MainActivity" android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- R0 probe (tasks #118), kept until phase 2 replaces it: start with adb am start. -->
+        <activity android:name=".rtcprobe.ProbeActivity" android:exported="true"
+            android:screenOrientation="sensorLandscape" />
         <service android:name=".rtcprobe.ProbeService" android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
     </application>

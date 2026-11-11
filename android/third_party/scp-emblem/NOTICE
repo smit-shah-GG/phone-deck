@@ -1,0 +1,12 @@
+The Archon app icon and emblem drawables (app/src/main/res/drawable/emblem.xml,
+ic_launcher_foreground.xml) contain the SCP Foundation emblem:
+
+  "SCP Foundation (emblem).svg", Wikimedia Commons
+  https://commons.wikimedia.org/wiki/File:SCP_Foundation_(emblem).svg
+  Original logo by far2; high-resolution version by Aelanna.
+  Licensed under Creative Commons Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0)
+  https://creativecommons.org/licenses/by-sa/3.0/
+
+The path data is copied verbatim and only recoloured (the SVG circle is expressed as two
+arcs, and the <use> copies as rotated groups, with the same geometry). These icon assets
+are released under CC BY-SA 3.0 as well. The rest of the app is unaffected.

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="emblem">#FFFA4242</color>      <!-- phosphor red: the release icon -->
+    <color name="launcher_bg">#FF000000</color>
+</resources>
