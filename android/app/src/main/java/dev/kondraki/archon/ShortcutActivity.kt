@@ -60,14 +60,16 @@ class ShortcutActivity : Activity() {
         finish()
     }
 
-    /** Audio-only listening (#122 decision 3: the tile and the shortcut ignore the panel's
-     *  saved switches but keep its monitor/quality). Started from this activity, so Android
-     *  always lets the media service start, even when the tap came from the shade. */
+    /** The quick Listen (tile, shortcut, widget): audio only and PHONE ONLY, so the rig's
+     *  speakers go quiet until it stops (user, 2026-11-11: "I click it when I'm getting up and
+     *  walking away from the PC"). Ignores the panel's saved switches but keeps its monitor/
+     *  quality (#122 decision 3). Started from this activity, so Android always lets the media
+     *  service start, even when the tap came from the shade. Stopping restores the rig's routing. */
     private fun listen(): String {
         if (StreamEngine.active) return "Already streaming"
         val saved = dev.kondraki.archon.ui.StreamPrefs.load(this)
-        StreamService.apply(this, saved.copy(listen = true, mic = false, phoneOnly = false, video = false))
-        return "Listening to ${Deck.host.lowercase()}"
+        StreamService.apply(this, saved.copy(listen = true, mic = false, phoneOnly = true, video = false))
+        return "Listening to ${Deck.host.lowercase()} · phone only"
     }
 
     private fun JsonObject?.say(ok: String): String = when {
