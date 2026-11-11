@@ -209,7 +209,7 @@ fun Switch(on: Boolean) {
 
 /** .seg segmented control (shared shape with the Stream panel's). */
 @Composable
-fun SegRow(items: List<Pair<String, String>>, value: String?, onPick: (String) -> Unit) {
+fun SegRow(items: List<Pair<String, String>>, value: String?, small: Boolean = false, onPick: (String) -> Unit) {
     val ph = LocalPh.current
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items.forEach { (v, label) ->
@@ -217,8 +217,8 @@ fun SegRow(items: List<Pair<String, String>>, value: String?, onPick: (String) -
             val shape = RoundedCornerShape(6.dp)
             Box(Modifier.weight(1f).then(if (on) Modifier.boxGlow(ph.primary, 6.dp) else Modifier).clip(shape)
                 .background(if (on) ph.primary else ph.low).border(1.dp, if (on) ph.primary else ph.outline, shape)
-                .tap { onPick(v) }.padding(horizontal = 8.dp, vertical = 7.dp), contentAlignment = Alignment.Center) {
-                Mono(label, 13.sp, if (on) ph.onPrimary else ph.onVar)
+                .tap { onPick(v) }.padding(horizontal = if (small) 4.dp else 8.dp, vertical = 7.dp), contentAlignment = Alignment.Center) {
+                Mono(label, if (small) 12.sp else 13.sp, if (on) ph.onPrimary else ph.onVar)
             }
         }
     }
