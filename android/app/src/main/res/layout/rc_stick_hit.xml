@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The remote's stick hit area: a plain RemoteViews frame so its click can carry the tap's
+     screen bounds (Glance's own click intents are immutable, and Android drops the bounds). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rc_stick_hit" android:layout_width="match_parent" android:layout_height="match_parent" />

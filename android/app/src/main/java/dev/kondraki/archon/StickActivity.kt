@@ -88,6 +88,7 @@ class StickActivity : ComponentActivity() {
         val b = intent.sourceBounds ?: Rect(dm.widthPixels / 2 - (150 * d).toInt(), dm.heightPixels / 2 - (180 * d).toInt(),
             dm.widthPixels / 2 + (150 * d).toInt(), dm.heightPixels / 2 + (120 * d).toInt())
         val extra = ((RcGeom.LR_GAP_DP + RcGeom.LR_H_DP) * d).roundToInt()
+        android.util.Log.i("archon", "stick: sourceBounds=${intent.sourceBounds} → window $b")
         window.setBackgroundDrawable(ColorDrawable(AColor.TRANSPARENT))
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
@@ -210,8 +211,12 @@ private fun Stick(stickHeightPx: Int, onTouch: () -> Unit, onLeft: (Boolean) -> 
                 drawCircle(Brush.radialGradient(listOf(Color(0xFF0A0606), Color(0xFF160E0E), Color(0xFF1F1515)),
                     center = Offset(c.x, c.y - r * 0.1f), radius = r), r, c)
                 drawCircle(Color(0xFF2A1A1A), r - 22.dp.toPx(), c, style = Stroke(1.dp.toPx()))
-                // the lit ring, with a soft glow
-                for (i in 4 downTo 1) drawCircle(RED.copy(alpha = 0.07f * i), r - 1.dp.toPx(), c, style = Stroke((2 + i * 3).dp.toPx()))
+                // the lit ring, its glow spreading INWARD only: each stroke's outer edge stays on the
+                // ring, so nothing spills past the box and gets clipped
+                for (i in 4 downTo 1) {
+                    val w = (2 + i * 3).dp.toPx()
+                    drawCircle(RED.copy(alpha = 0.07f * i), r - w / 2, c, style = Stroke(w))
+                }
                 drawCircle(RED, r - 1.dp.toPx(), c, style = Stroke(2.dp.toPx()))
             }
             // the cap: leans toward the thumb, inside the well

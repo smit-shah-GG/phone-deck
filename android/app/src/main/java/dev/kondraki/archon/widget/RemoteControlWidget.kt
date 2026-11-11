@@ -23,6 +23,7 @@ import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
@@ -182,12 +183,14 @@ private fun Handset(ctx: Context, s: RemoteSnap, sending: Boolean) {
         }
         // the stick: tap to wake (StickActivity opens exactly over this block)
         Column(GlanceModifier.fillMaxWidth().defaultWeight().padding(top = 12.dp)) {
-            Box(GlanceModifier.fillMaxWidth().defaultWeight()
-                .let { m -> if (off) m else m.clickable(actionStartActivity(stickIntent(ctx))) }, contentAlignment = Alignment.Center) {
+            Box(GlanceModifier.fillMaxWidth().defaultWeight(), contentAlignment = Alignment.Center) {
                 Image(ImageProvider(R.drawable.rc_well), null, contentScale = ContentScale.Fit, modifier = GlanceModifier.fillMaxSize())
                 Box(GlanceModifier.size(RcGeom.CAP_DP.dp).background(ImageProvider(R.drawable.rc_cap)), contentAlignment = Alignment.Center) {
                     Text(if (off) "" else "TAP", style = mono(13.sp, Rc.faint, center = true))
                 }
+                // on top: the hit area, a raw RemoteViews frame with a MUTABLE PendingIntent, so the
+                // launcher can fill in the tap's screen bounds (StickActivity sits exactly over this box)
+                if (!off) AndroidRemoteViews(stickHit(ctx), GlanceModifier.fillMaxSize())
             }
             Row(GlanceModifier.fillMaxWidth().padding(top = RcGeom.LR_GAP_DP.dp).height(RcGeom.LR_H_DP.dp)) {
                 BigKey("L", GlanceModifier.defaultWeight().fillMaxHeight(), act(op("click", "left")), off)
@@ -285,6 +288,11 @@ private fun RowScope.ColourKey(bar: Int, label: String, a: Action?, dead: Boolea
 
 private fun openApp(ctx: Context) = Intent(ctx, MainActivity::class.java).setData(Uri.parse("archon://remote/open"))
     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+private fun stickHit(ctx: Context) = android.widget.RemoteViews(ctx.packageName, R.layout.rc_stick_hit).apply {
+    setOnClickPendingIntent(R.id.rc_stick_hit, android.app.PendingIntent.getActivity(ctx, 7, stickIntent(ctx),
+        android.app.PendingIntent.FLAG_MUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT))
+}
 
 private fun stickIntent(ctx: Context) = Intent(ctx, StickActivity::class.java).setData(Uri.parse("archon://remote/stick"))
     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
