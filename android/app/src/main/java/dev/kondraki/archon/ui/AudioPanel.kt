@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,8 +49,9 @@ import kotlinx.serialization.json.put
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.TextStyle
 
-/** The Audio panel, 1:1 with deck.html #panel-audio: mutes, the now-playing hero, a copy of
- *  volume + transport (30%); output and input devices (the rest). */
+/** The Audio panel (#156): the LOOK side has what's playing, the rig's play controls and volume
+ *  (this screen IS the player, so it docks no mini player) and the rarely-changed input device;
+ *  the THUMB side has the two mutes and the output device you actually switch. */
 @Composable
 fun AudioPanel(state: JsonObject?) {
     val ph = LocalPh.current
@@ -60,30 +62,61 @@ fun AudioPanel(state: JsonObject?) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PanelHead("Audio")
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val leftW = maxWidth * 0.3f
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Column(Modifier.width(leftW).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MuteButton("Mic", a.bool("mic_muted") == true, Modifier.weight(1f)) {
-                            post("/audio/mute", buildJsonObject { put("target", "mic") })
-                        }
-                        MuteButton("Speaker", a.bool("sink_muted") == true, Modifier.weight(1f)) {
-                            post("/audio/mute", buildJsonObject { put("target", "sink") })
-                        }
-                    }
-                    NowPlaying(np, Modifier.weight(1f))
+        HandRow(Modifier.weight(1f).fillMaxWidth(), gap = 16.dp,
+            look = {
+                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    NowPlayingWide(np)
+                    Transport(np.str("status") == "Playing") { act -> post("/media/$act") }
                     VolRow(a.num("volume")?.toInt(), a.bool("sink_muted") == true,
                         onMute = { post("/audio/mute", buildJsonObject { put("target", "sink") }) },
                         onSet = { v -> post("/audio/volume", buildJsonObject { put("pct", v) }) })
-                    Transport(np.str("status") == "Playing") { act -> post("/media/$act") }
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        DeviceList("Input device", a.list("sources")) { id -> post("/audio/source", buildJsonObject { put("id", id) }) }
+                    }
                 }
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DeviceList("Output device", a.list("sinks")) { id -> post("/audio/sink", buildJsonObject { put("id", id) }) }
-                    DeviceList("Input device", a.list("sources")) { id -> post("/audio/source", buildJsonObject { put("id", id) }) }
+            },
+            thumb = {
+                Column(Modifier.width(THUMB_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MuteButton("Mic", a.bool("mic_muted") == true, Modifier.weight(1f).height(64.dp)) {
+                            post("/audio/mute", buildJsonObject { put("target", "mic") })
+                        }
+                        MuteButton("Speaker", a.bool("sink_muted") == true, Modifier.weight(1f).height(64.dp)) {
+                            post("/audio/mute", buildJsonObject { put("target", "sink") })
+                        }
+                    }
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        DeviceList("Output device", a.list("sinks")) { id -> post("/audio/sink", buildJsonObject { put("id", id) }) }
+                    }
                 }
-            }
+            })
+    }
+}
+
+/** What's playing, art beside the words (the look side's head). */
+@Composable
+private fun NowPlayingWide(np: JsonObject?) {
+    val ph = LocalPh.current
+    val key = np.str("art_key").orEmpty()
+    var art by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(key) { art = if (key.isEmpty()) null else Deck.art(key) }   // only refetched per track
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
+        .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(ph.surface, ph.low)))
+        .cornerTicks(ph.primary.copy(alpha = 0.55f)).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        val bmp = art
+        if (bmp != null) Image(bmp.asImageBitmap(), null, Modifier.size(120.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
+        else Box(Modifier.size(120.dp).border(1.dp, ph.outline, RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
+            Mono("NO SIGNAL", 10.sp, ph.onVar.copy(alpha = 0.7f))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Label("NOW PLAYING", 10.sp, ph.secondary, spacing = 0.2f)
+            Text(np.str("track")?.takeIf { it.isNotBlank() } ?: np.str("title").orEmpty().ifEmpty { "—" }, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                style = CssLine + TextStyle(fontFamily = Plex, fontSize = 15.sp, color = ph.on))
+            val sub = listOfNotNull(np.str("artist")?.takeIf { it.isNotBlank() }, np.str("player")?.takeIf { it.isNotBlank() }).joinToString(" · ")
+            if (sub.isNotEmpty()) Mono(sub, 12.sp, ph.onVar)
+            Mono(when (np.str("status")) { "Playing" -> "▶ playing"; "Paused" -> "‖ paused"; else -> "" }, 11.sp, ph.onVar.copy(alpha = 0.8f))
         }
     }
 }

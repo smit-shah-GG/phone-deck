@@ -1,5 +1,7 @@
 package dev.kondraki.archon.ui
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import android.app.Activity
 import android.nfc.NfcAdapter
 import androidx.compose.foundation.background
@@ -86,30 +88,38 @@ fun Site19Panel() {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PanelHead("Site-19"); Mono("level 5 clearance", 11.sp, ph.onVar)
         }
-        Card(Modifier.weight(1f).fillMaxWidth()) {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                val shape = RoundedCornerShape(12.dp)
-                Box(Modifier.fillMaxWidth().boxGlow(ph.primary, 8.dp).clip(shape).background(lerp(Color.Black, ph.primary, 0.88f))
-                    .border(1.dp, ph.outline, shape)
-                    .tap {
-                        when {
-                            nfc == null -> status = "This phone has no NFC."
-                            !nfc.isEnabled -> status = "NFC is off — turn it on in quick settings, then try again."
-                            armed -> status = "Scanner armed — present the card."
-                            else -> { armed = true; status = "Awaiting clearance — present the card…" }
-                        }
-                    }.padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
-                    Text("◈ PRESENT CLEARANCE", style = CssLine + TextStyle(fontFamily = Plex, fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold, letterSpacing = 4.sp, color = ph.onPrimary))
+        // #156: status + the last crossing's output are the LOOK side; PRESENT CLEARANCE is a tall
+        // button in the thumb column, above the docked mini player
+        HandRow(Modifier.weight(1f).fillMaxWidth(),
+            look = {
+                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(status, Modifier.fillMaxWidth(), style = CssLine + TextStyle(fontFamily = Plex, fontSize = 14.sp, color = ph.onVar))
+                    val sh = RoundedCornerShape(6.dp)
+                    Box(Modifier.weight(1f).fillMaxWidth().clip(sh).background(ph.low).border(1.dp, ph.outline, sh)
+                        .verticalScroll(rememberScrollState()).padding(12.dp)) {
+                        if (output.isEmpty()) Mono("the controller's output appears here after a crossing", 12.sp, ph.onVar.copy(alpha = 0.6f), maxLines = 2)
+                        else Mono(output, 12.sp, ph.on, maxLines = 40)
+                    }
                 }
-                Text(status, Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-                    style = CssLine + TextStyle(fontFamily = Plex, fontSize = 14.sp, color = ph.onVar))
-                if (output.isNotEmpty()) {
-                    val s = RoundedCornerShape(6.dp)
-                    Box(Modifier.fillMaxWidth().heightIn(max = 192.dp).clip(s).background(ph.low).border(1.dp, ph.outline, s)
-                        .verticalScroll(rememberScrollState()).padding(12.dp)) { Mono(output, 12.sp, ph.on, maxLines = 40) }
+            },
+            thumb = {
+                Column(Modifier.width(THUMB_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val shape = RoundedCornerShape(12.dp)
+                    Box(Modifier.weight(1f).fillMaxWidth().boxGlow(ph.primary, 8.dp).clip(shape).background(lerp(Color.Black, ph.primary, 0.88f))
+                        .border(1.dp, ph.outline, shape)
+                        .tap {
+                            when {
+                                nfc == null -> status = "This phone has no NFC."
+                                !nfc.isEnabled -> status = "NFC is off — turn it on in quick settings, then try again."
+                                armed -> status = "Scanner armed — present the card."
+                                else -> { armed = true; status = "Awaiting clearance — present the card…" }
+                            }
+                        }, contentAlignment = Alignment.Center) {
+                        Text("◈\nPRESENT\nCLEARANCE", textAlign = TextAlign.Center, style = CssLine + TextStyle(fontFamily = Plex, fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold, letterSpacing = 4.sp, color = ph.onPrimary))
+                    }
+                    MiniPlayer()
                 }
-            }
-        }
+            })
     }
 }

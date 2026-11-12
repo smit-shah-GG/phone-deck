@@ -1,5 +1,7 @@
 package dev.kondraki.archon.ui
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -44,8 +46,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/** Modes, 1:1 with app.js loadModes(): big terminal buttons (2 per row) from GET /modes, and
- *  the $ logline with what the last mode did. */
+/** Modes (#156): the modes from GET /modes as tall buttons in the thumb column, and the $ log of
+ *  what the last one did on the look side. */
 @Composable
 fun ModesPanel() {
     val ph = LocalPh.current
@@ -55,48 +57,52 @@ fun ModesPanel() {
     var output by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { modes = (Deck.getElement("/modes") as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList() }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    fun runMode(id: String, label: String) {
+        if (busy != null) return
+        busy = id; output = "applying $label…"
+        scope.launch {
+            val r = Deck.postJson("/modes/run", buildJsonObject { put("id", id) })
+            output = when {
+                r == null -> "✗ rig offline"
+                r.bool("ok") == true -> (r["steps"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }?.joinToString("\n").orEmpty()
+                else -> "✗ ${r.str("error").orEmpty()}"
+            }
+            busy = null
+        }
+    }
+
+    // #156: the $ log (what the last mode actually did) is the LOOK side; the modes stack as tall
+    // buttons in the thumb column above the docked mini player
+    Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PanelHead("Modes")
-        val list = modes
-        when {
-            list == null -> Mono("…", 13.sp, ph.onVar)
-            list.isEmpty() -> Mono("No modes. Add them to ~/.config/phone-deck/modes.json", 13.sp, ph.onVar.copy(alpha = 0.7f))
-            else -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                list.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        row.forEach { m ->
+        HandRow(Modifier.weight(1f).fillMaxWidth(),
+            look = {
+                val shape = RoundedCornerShape(6.dp)
+                Box(Modifier.weight(1f).fillMaxHeight().clip(shape).background(ph.low).border(1.dp, ph.outline, shape)
+                    .verticalScroll(rememberScrollState()).padding(12.dp)) {
+                    if (output.isEmpty()) Mono("$ — run a mode; what it did shows here", 12.sp, ph.onVar.copy(alpha = 0.6f))
+                    else Text(buildAnnotatedString {
+                        withStyle(SpanStyle(color = ph.secondary, shadow = Shadow(ph.secondary.copy(alpha = 0.45f), Offset.Zero, 12f))) { append("$ ") }
+                        append(output)
+                    }, style = CssLine + TextStyle(fontFamily = Plex, fontSize = 12.sp, color = ph.primary,
+                        shadow = Shadow(ph.primary.copy(alpha = 0.35f), Offset.Zero, 8f)))
+                }
+            },
+            thumb = {
+                Column(Modifier.width(THUMB_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val list = modes
+                    when {
+                        list == null -> Box(Modifier.weight(1f)) { Mono("…", 13.sp, ph.onVar) }
+                        list.isEmpty() -> Box(Modifier.weight(1f)) { Mono("No modes. Add them to ~/.config/phone-deck/modes.json", 12.sp, ph.onVar.copy(alpha = 0.7f), maxLines = 3) }
+                        else -> list.forEach { m ->
                             val id = m.str("id").orEmpty()
                             val label = m.str("label") ?: id
-                            ModeButton(label, dim = busy == id, Modifier.weight(1f)) {
-                                if (busy != null) return@ModeButton
-                                busy = id; output = "applying $label…"
-                                scope.launch {
-                                    val r = Deck.postJson("/modes/run", buildJsonObject { put("id", id) })
-                                    output = when {
-                                        r == null -> "✗ rig offline"
-                                        r.bool("ok") == true -> (r["steps"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }?.joinToString("\n").orEmpty()
-                                        else -> "✗ ${r.str("error").orEmpty()}"
-                                    }
-                                    busy = null
-                                }
-                            }
+                            ModeButton(label, dim = busy == id, Modifier.weight(1f).fillMaxWidth()) { runMode(id, label) }
                         }
-                        if (row.size == 1) Box(Modifier.weight(1f))
                     }
+                    MiniPlayer()
                 }
-            }
-        }
-        if (output.isNotEmpty()) {
-            val shape = RoundedCornerShape(6.dp)
-            Box(Modifier.fillMaxWidth().heightIn(max = 256.dp).clip(shape).background(ph.low).border(1.dp, ph.outline, shape)
-                .verticalScroll(rememberScrollState()).padding(12.dp)) {
-                Text(buildAnnotatedString {
-                    withStyle(SpanStyle(color = ph.secondary, shadow = Shadow(ph.secondary.copy(alpha = 0.45f), Offset.Zero, 12f))) { append("$ ") }
-                    append(output)
-                }, style = CssLine + TextStyle(fontFamily = Plex, fontSize = 12.sp, color = ph.primary,
-                    shadow = Shadow(ph.primary.copy(alpha = 0.35f), Offset.Zero, 8f)))
-            }
-        }
+            })
     }
 }
 
@@ -107,7 +113,7 @@ private fun ModeButton(label: String, dim: Boolean, modifier: Modifier, onClick:
     val shape = RoundedCornerShape(6.dp)
     Box(modifier.alpha(if (dim) 0.5f else 1f).clip(shape)
         .background(Brush.verticalGradient(listOf(ph.surface, ph.low))).border(1.dp, ph.outline, shape)
-        .tap(onClick).padding(horizontal = 20.dp, vertical = 30.dp), contentAlignment = Alignment.Center) {
+        .tap(onClick).padding(horizontal = 20.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
         Text(label, maxLines = 1, style = CssLine + TextStyle(fontFamily = Plex, fontSize = 20.sp, letterSpacing = 3.sp, color = ph.on))
     }
 }

@@ -66,8 +66,8 @@ import kotlinx.serialization.json.put
 
 private const val WS_COUNT = 15            // app.js WS_COUNT: workspaces shown per monitor
 
-/** HOME, 1:1 with deck.html #home: one card per monitor (capped at 3 columns) and the
- *  context strip below them (app.js renderWorkspaces + renderContext). */
+/** HOME: one card per monitor in PHYSICAL order (capped at 3), each with its workspace grid at
+ *  the bottom, then a strip with the context row and the docked mini player (#156). */
 @Composable
 fun Home(state: JsonObject?) {
     val ph = LocalPh.current
@@ -102,7 +102,11 @@ fun Home(state: JsonObject?) {
                 )
             }
         }
-        ContextStrip(state, ctx) { path, body -> post(path, body) }
+        // the bottom strip (#156): the context row shares it with the docked mini player
+        HandRow(Modifier.fillMaxWidth(), gap = 8.dp,
+            look = { Box(Modifier.weight(1f), contentAlignment = if (Hand.right.value) Alignment.CenterEnd else Alignment.CenterStart) {
+                ContextStrip(state, ctx) { path, body -> post(path, body) } } },
+            thumb = { MiniPlayer() })
     }
 }
 
@@ -120,13 +124,6 @@ private fun MonitorCard(
                 ph.onVar.copy(alpha = 0.7f), Modifier.weight(1f, fill = false))
             if (m.bool("focused") == true) Mono(" ●", 12.sp, ph.primary)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            (1..WS_COUNT).chunked(5).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { n -> WsButton(n, n == active, Modifier.weight(1f)) { onWs(n) } }
-                }
-            }
-        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val shape = RoundedCornerShape(6.dp)
             Box(Modifier.clip(shape).background(if (dpms) ph.high else Color(0xFF991B1B))
@@ -142,6 +139,14 @@ private fun MonitorCard(
                 val title = w.str("title")?.takeIf { it.isNotEmpty() } ?: w.str("cls") ?: "?"
                 WinButton((if (ws != null) "$ws · " else "") + title, w.bool("focused") == true) {
                     w.str("address")?.let(onWin)
+                }
+            }
+        }
+        // the workspace grid at the BOTTOM of the card: tapped constantly, so nearest the thumbs (#156)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            (1..WS_COUNT).chunked(5).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { n -> WsButton(n, n == active, Modifier.weight(1f)) { onWs(n) } }
                 }
             }
         }

@@ -1,5 +1,6 @@
 package dev.kondraki.archon.ui
 
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,8 +39,10 @@ fun AboutPanel(onOpen: (String) -> Unit) {
     val ph = LocalPh.current
     Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PanelHead("About")
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(Modifier.weight(1.4f).fillMaxHeight()) {
+        // #156: the dossier is the LOOK side; Files / Config / System stack in the thumb column
+        // above the docked mini player
+        HandRow(Modifier.weight(1f).fillMaxWidth(), gap = 16.dp, look = {
+            Card(Modifier.weight(1f).fillMaxHeight()) {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Image(painterResource(R.drawable.emblem), null, Modifier.size(52.dp), colorFilter = ColorFilter.tint(ph.primary))
@@ -56,22 +59,23 @@ fun AboutPanel(onOpen: (String) -> Unit) {
                     Section("Description",
                         "A handheld interface used to direct other assets and to open crossings into Site-19. " +
                             "Its disruption is confined to a single individual.")
+                    // the build credits read here, on the look side (#156)
+                    CardTitle("Build")
+                    Mono("Archon ${BuildConfig.VERSION_NAME} · ${BuildConfig.APPLICATION_ID}", 11.sp, ph.onVar, maxLines = 2)
+                    Mono("Emblem: SCP Foundation logo by far2, high-res by Aelanna, CC BY-SA 3.0 (creativecommons.org/licenses/by-sa/3.0).",
+                        11.sp, ph.onVar, maxLines = 4)
+                    Mono("Fonts: IBM Plex Mono, Chakra Petch (SIL OFL 1.1).", 11.sp, ph.onVar, maxLines = 2)
                 }
             }
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // the PWA's More launcher (stowed utilities), above the build section
-                Row(Modifier.fillMaxWidth().height(96.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf("files" to "Files", "config" to "Config", "system" to "System").forEach { (key, name) ->
-                        LaunchButton(name, Modifier.weight(1f).fillMaxHeight()) { onOpen(key) }
-                    }
+        }, thumb = {
+            Column(Modifier.width(THUMB_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("files" to "Files", "config" to "Config", "system" to "System").forEach { (key, name) ->
+                    LaunchButton(name, Modifier.fillMaxWidth().height(64.dp)) { onOpen(key) }
                 }
-                CardTitle("Build")
-                Mono("Archon ${BuildConfig.VERSION_NAME} · ${BuildConfig.APPLICATION_ID}", 11.sp, ph.onVar, maxLines = 2)
-                Mono("Emblem: SCP Foundation logo by far2, high-res by Aelanna, CC BY-SA 3.0 (creativecommons.org/licenses/by-sa/3.0).",
-                    11.sp, ph.onVar, maxLines = 4)
-                Mono("Fonts: IBM Plex Mono, Chakra Petch (SIL OFL 1.1).", 11.sp, ph.onVar, maxLines = 2)
+                Spacer(Modifier.weight(1f))
+                MiniPlayer()
             }
-        }
+        })
     }
 }
 

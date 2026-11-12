@@ -144,11 +144,11 @@ fun VoicePanel() {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PanelHead("Voice")
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Card(Modifier.width(280.dp).fillMaxHeight()) {
-                CardTitle("Microphone")
+        // #156: the trace is the LOOK side; the mic column (tall START + mini player) is the thumb side
+        val micColumn: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+            Column(Modifier.width(THUMB_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SegRow(listOf("desktop" to "Desktop (rig)", "device" to "Device (phone)"), mic, small = true) { if (state == "idle") mic = it }
-                VoiceButton(state) {
+                VoiceButton(state, Modifier.weight(1f)) {
                     when (state) {
                         "idle" -> {
                             if (mic == "device") {
@@ -179,7 +179,10 @@ fun VoicePanel() {
                     }
                     append(". Tap a result to run.")
                 }, style = CssLine + TextStyle(fontFamily = Plex, fontSize = 12.sp, color = ph.onVar.copy(alpha = 0.8f)))
+                MiniPlayer()
             }
+        }
+        HandRow(Modifier.weight(1f).fillMaxWidth(), thumb = micColumn, look = {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 CardTitle("Trace · Answers")
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -191,7 +194,7 @@ fun VoicePanel() {
                     }
                 }
             }
-        }
+        })
     }
     confirm?.let { tr ->
         AlertDialog(onDismissRequest = { confirm = null }, containerColor = ph.surface,
@@ -203,12 +206,12 @@ fun VoicePanel() {
 
 /** #voice-btn: the amber terminal button; pulses while recording, dims while working. */
 @Composable
-private fun VoiceButton(state: String, onClick: () -> Unit) {
+private fun VoiceButton(state: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val ph = LocalPh.current
     val pulse = if (state == "recording") rememberInfiniteTransition(label = "rec").animateFloat(1f, 0.5f,
         infiniteRepeatable(tween(1000), RepeatMode.Reverse), label = "rec").value else 1f
     val shape = RoundedCornerShape(12.dp)
-    Box(Modifier.fillMaxWidth().alpha(if (state == "processing") 0.7f else pulse).clip(shape)
+    Box(modifier.fillMaxWidth().alpha(if (state == "processing") 0.7f else pulse).clip(shape)
         .background(Brush.radialGradient(listOf(ph.secondary.copy(alpha = 0.12f), Color.Transparent)))
         .border(1.dp, ph.secondary, shape)
         .then(if (state == "processing") Modifier else Modifier.tap(onClick)).padding(vertical = 32.dp),

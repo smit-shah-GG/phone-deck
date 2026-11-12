@@ -122,6 +122,14 @@ fun SystemPanel(state: JsonObject?, onBack: () -> Unit) {
                     }
                 }
                 Card(Modifier.fillMaxWidth()) {
+                    // #156: which side the rail, the thumb column and the mini player sit on; per phone
+                    Mono("Handedness · this phone", 14.sp, ph.onVar)
+                    val hctx = androidx.compose.ui.platform.LocalContext.current
+                    SegRow(listOf("right" to "Right-handed", "left" to "Left-handed"), if (Hand.right.value) "right" else "left") {
+                        Hand.set(hctx, it == "right")
+                    }
+                }
+                Card(Modifier.fillMaxWidth()) {
                     Mono("Ambient — idle after", 14.sp, ph.onVar)
                     val amb = theme.obj("ambient")
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

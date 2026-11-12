@@ -62,8 +62,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** The V3 cockpit shell, 1:1: band on top; the centre (a summoned panel) and the rail
- *  (volume, transport, dock) below. Panels not ported yet say so instead of pretending. */
+/** The cockpit shell: band on top; below it the summoned panel and the slim rail on the
+ *  thumb edge (#156: icons only; play + volume moved into each screen's docked mini player). Panels not ported yet say so instead of pretending. */
 @Composable
 fun Shell(state: JsonObject?, link: Link) {
     val ph = LocalPh.current
@@ -75,27 +75,29 @@ fun Shell(state: JsonObject?, link: Link) {
     if (focus && t != null) { FocusStage(t); return }
     Column(Modifier.fillMaxSize().background(ph.bg)) {
         Band(state, link)
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val railW = max(150.dp, maxWidth * 0.2f)
-            Row(Modifier.fillMaxSize()) {
-                Box(Modifier.weight(1f).fillMaxHeight().padding(8.dp)) {
-                    when (val p = panel) {
-                        null -> Home(state)
-                        "audio" -> AudioPanel(state)
-                        "stream" -> StreamPanel(state)
-                        "modes" -> ModesPanel()
-                        "voice" -> VoicePanel()
-                        "site19" -> Site19Panel()
-                        "remote" -> RemotePanel()
-                        "system" -> SystemPanel(state) { panel = "more" }
-                        "config" -> ConfigPanel { panel = "more" }
-                        "files" -> FilesPanel(state) { panel = "more" }
-                        "more" -> AboutPanel { panel = it }   // its launchers open Files / Config / System
-                        else -> NotPorted(p) { panel = it }
-                    }
+        // the slim rail sits on the thumb edge (#156); the lit icon toggles back home
+        val onPanel: (String) -> Unit = { panel = if (panel == it) null else it }
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            if (!Hand.right.value) SlimRail(panel, panel == "more" || panel in SUB, onPanel)
+            Box(Modifier.weight(1f).fillMaxHeight().padding(8.dp)) {
+                when (val p = panel) {
+                    null -> Home(state)
+                    "audio" -> AudioPanel(state)
+                    "stream" -> StreamPanel(state)
+                    "modes" -> ModesPanel()
+                    "voice" -> VoicePanel()
+                    "site19" -> Site19Panel()
+                    "remote" -> RemotePanel()
+                    // the sub-panels under More weren't drawn: they follow the rule with a bottom
+                    // strip holding the docked mini player at the thumb end (#156)
+                    "system" -> WithMini { SystemPanel(state) { panel = "more" } }
+                    "config" -> WithMini { ConfigPanel { panel = "more" } }
+                    "files" -> WithMini { FilesPanel(state) { panel = "more" } }
+                    "more" -> AboutPanel { panel = it }   // its launchers open Files / Config / System
+                    else -> NotPorted(p) { panel = it }
                 }
-                Rail(state, panel, Modifier.width(railW).fillMaxHeight()) { panel = if (panel == it) null else it }   // the lit row toggles home
             }
+            if (Hand.right.value) SlimRail(panel, panel == "more" || panel in SUB, onPanel)
         }
     }
 }
@@ -181,26 +183,10 @@ private fun Clock() {
 }
 
 @Composable
-private fun Rail(state: JsonObject?, panel: String?, modifier: Modifier, onPanel: (String) -> Unit) {
-    val ph = LocalPh.current
-    val a = state.obj("audio")
-    val scope = rememberCoroutineScope()
-    Column(
-        modifier.background(lerp(ph.bg, ph.surface, 0.30f))
-            .drawBehind { drawLine(ph.line, Offset(0.5f, 0f), Offset(0.5f, size.height), 1f) }
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        VolRow(a.num("volume")?.toInt(), a.bool("sink_muted") == true,
-            onMute = { scope.launch { Deck.post("/audio/mute", buildJsonObject { put("target", "sink") }) } },
-            onSet = { v -> scope.launch { Deck.post("/audio/volume", buildJsonObject { put("pct", v) }) } })
-        Transport(a.obj("now_playing").str("status") == "Playing") { act -> scope.launch { Deck.post("/media/$act") } }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(ph.line))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            PANELS.forEach { (key, label) -> DockRow(label, panel == key, muted = key in PHASE) { onPanel(key) } }
-            Spacer(Modifier.weight(1f))
-            DockRow("More …", panel == "more" || panel in SUB, muted = true) { onPanel("more") }
-        }
+private fun WithMini(content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+        HandRow(Modifier.fillMaxWidth(), look = { Spacer(Modifier.weight(1f)) }, thumb = { MiniPlayer() })
     }
 }
 

@@ -114,38 +114,44 @@ fun StreamPanel(state: JsonObject?) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PanelHead("Stream")
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Card(Modifier.width(288.dp).fillMaxHeight()) {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CardTitle("Control")
+        // #156: the stage is the LOOK side; the control column (thumb side) runs, bottom to top by
+        // how often it's touched: the mini player, Stop | Connect, the four switches, monitor + quality
+        HandRow(Modifier.weight(1f).fillMaxWidth(),
+            look = {
+                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(Modifier.size(10.dp).clip(CircleShape).background(if (live) ph.primary else ph.onVar.copy(alpha = 0.4f))
                             .then(if (live) Modifier.glow(ph.primary, 5.dp) else Modifier))
-                        Mono(status, 13.sp, ph.onVar, maxLines = 2)
+                        Mono(status, 13.sp, ph.onVar, maxLines = 1)
                     }
-                    SwitchRow("Listen to PC", opts.listen) { change(opts.copy(listen = !opts.listen)) }
-                    SwitchRow("Phone mic → PC", opts.mic) {
-                        if (opts.mic) change(opts.copy(mic = false))
-                        else if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
-                            change(opts.copy(mic = true))
-                        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                    SwitchRow("Phone-only output", opts.phoneOnly) { change(opts.copy(phoneOnly = !opts.phoneOnly)) }
-                    SwitchRow("Video (screen)", opts.video, last = true) { change(opts.copy(video = !opts.video)) }
-                    Seg(names.map { it to it }, opts.monitor) { change(opts.copy(monitor = it)) }
-                    Seg(listOf("low" to "540p", "medium" to "720p", "high" to "1080p"), opts.quality) { change(opts.copy(quality = it)) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        BigButton("Connect", filled = true, Modifier.weight(1f)) {
-                            if (opts.anyDirection) StreamService.apply(ctx, opts)
-                        }
-                        BigButton("Stop", filled = false, Modifier.weight(1f)) { StreamService.stop(ctx) }
-                    }
-                    Mono("Mic shows up on the rig as input “Monitor of PhoneDeckMic”: select it in the app you want it in. " +
-                        "Headphones recommended to avoid echo. Audio keeps playing with the screen off.", 11.sp, ph.onVar.copy(alpha = 0.7f), maxLines = 6)
+                    Stage(track, Modifier.weight(1f).fillMaxWidth())
+                    Mono("Phone mic shows up on the rig as “Monitor of PhoneDeckMic”. Headphones avoid echo. Audio keeps playing with the screen off.",
+                        11.sp, ph.onVar.copy(alpha = 0.6f), maxLines = 1)
                 }
-            }
-            Stage(track, Modifier.weight(1f).fillMaxHeight())
-        }
+            },
+            thumb = {
+                Column(Modifier.width(THUMB_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Seg(names.map { it to it }, opts.monitor) { change(opts.copy(monitor = it)) }
+                        Seg(listOf("low" to "540p", "medium" to "720p", "high" to "1080p"), opts.quality) { change(opts.copy(quality = it)) }
+                        SwitchRow("Listen to PC", opts.listen) { change(opts.copy(listen = !opts.listen)) }
+                        SwitchRow("Phone mic → PC", opts.mic) {
+                            if (opts.mic) change(opts.copy(mic = false))
+                            else if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                                change(opts.copy(mic = true))
+                            else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                        SwitchRow("Phone-only output", opts.phoneOnly) { change(opts.copy(phoneOnly = !opts.phoneOnly)) }
+                        SwitchRow("Video (screen)", opts.video, last = true) { change(opts.copy(video = !opts.video)) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val stop = @Composable { BigButton("Stop", filled = false, Modifier.weight(1f)) { StreamService.stop(ctx) } }
+                        val connect = @Composable { BigButton("Connect", filled = true, Modifier.weight(1f)) { if (opts.anyDirection) StreamService.apply(ctx, opts) } }
+                        if (Hand.right.value) { stop(); connect() } else { connect(); stop() }   // Connect nearest the thumb
+                    }
+                    MiniPlayer()
+                }
+            })
     }
 }
 
@@ -161,7 +167,8 @@ private fun Stage(track: VideoTrack?, modifier: Modifier) {
         } else {
             VideoSurface(track, crosshair = false)
             val s = RoundedCornerShape(6.dp)
-            Box(Modifier.align(Alignment.TopEnd).padding(6.dp).clip(s).background(Color.Black.copy(alpha = 0.55f))
+            Box(Modifier.align(if (Hand.right.value) Alignment.BottomEnd else Alignment.BottomStart).padding(6.dp)   // ⛶ nearest the thumb (#156)
+                .clip(s).background(Color.Black.copy(alpha = 0.55f))
                 .border(1.dp, ph.primary.copy(alpha = 0.4f), s).tap { StreamUi.focus.value = true }
                 .padding(horizontal = 8.dp, vertical = 6.dp)) { Mono("⛶", 18.sp, ph.primary) }
         }

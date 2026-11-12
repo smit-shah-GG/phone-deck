@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         }
         Skin.loadCached(this)
+        dev.kondraki.archon.ui.Hand.load(this)                    // right/left-handed (#156), per phone
         // PiP (#122 step 4): auto-enter on leaving the app while video streams; buttons follow the
         // session (mic present / muted)
         lifecycleScope.launch {
