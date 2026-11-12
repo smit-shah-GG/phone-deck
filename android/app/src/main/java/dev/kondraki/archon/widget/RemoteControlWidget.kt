@@ -171,11 +171,11 @@ private fun Handset(ctx: Context, s: RemoteSnap, sending: Boolean) {
                 Text(out, style = mono(14.sp, Rc.amberDim), maxLines = 1)
             }
         }
-        // BACK · HOME · ENTER · MIC
+        // BACK · SPACE · ENTER · MIC
         Row(GlanceModifier.fillMaxWidth().padding(top = 12.dp).height(44.dp)) {
             SmallKey("BACK", GlanceModifier.defaultWeight().fillMaxHeight(), act(op("key", "esc")), dead = off)
             Spacer(GlanceModifier.width(8.dp))
-            SmallKey("HOME", GlanceModifier.defaultWeight().fillMaxHeight(), act(op("key", "super")), dead = off)
+            SmallKey("SPACE", GlanceModifier.defaultWeight().fillMaxHeight(), act(op("key", "space")), dead = off)   // replaced HOME (#152)
             Spacer(GlanceModifier.width(8.dp))
             SmallKey("ENTER", GlanceModifier.defaultWeight().fillMaxHeight(), act(op("key", "enter")), dead = off)
             Spacer(GlanceModifier.width(8.dp))

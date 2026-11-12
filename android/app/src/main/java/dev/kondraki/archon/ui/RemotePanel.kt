@@ -87,8 +87,9 @@ fun RemotePanel() {
                     Key("⌫", wide = true) { send("key") { put("name", "backspace") } }
                     Key("⏎", wide = true) { send("key") { put("name", "enter") } }
                 }
+                // Space replaced Home (#152: push-to-talk for voice mode on the rig)
                 listOf(listOf("esc" to "Esc", "tab" to "Tab", "up" to "↑", "down" to "↓"),
-                    listOf("home" to "Home", "end" to "End", "left" to "←", "right" to "→")).forEach { row ->
+                    listOf("space" to "Space", "end" to "End", "left" to "←", "right" to "→")).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { (k, label) -> Key(label, Modifier.weight(1f)) { send("key") { put("name", k) } } }
                     }
