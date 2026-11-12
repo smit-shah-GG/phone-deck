@@ -83,6 +83,9 @@ class StickActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Deck.session.token.value == null) { finish(); return }
+        // a fresh /ws/input per wake: one left over from before the phone idled can be half-open,
+        // and moves sent into it vanish until a ping notices (#145)
+        dev.kondraki.archon.data.InputLink.close()
         val d = resources.displayMetrics.density
         val dm = resources.displayMetrics
         val b = intent.sourceBounds ?: Rect(dm.widthPixels / 2 - (150 * d).toInt(), dm.heightPixels / 2 - (180 * d).toInt(),

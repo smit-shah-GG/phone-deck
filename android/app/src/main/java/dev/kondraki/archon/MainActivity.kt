@@ -174,6 +174,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         stoppedAt = SystemClock.elapsedRealtime()
+        idleJob?.cancel(); idleJob = null                         // no idling in while backgrounded (#145)
         Deck.release("ui")
         dev.kondraki.archon.data.InputLink.close()
         StreamEngine.setVisible(false)        // no surface shows the video now: drop it, keep audio (#122)

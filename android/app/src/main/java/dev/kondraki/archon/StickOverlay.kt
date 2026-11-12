@@ -58,6 +58,7 @@ object StickOverlay {
     fun show(ctx: Context, b: Rect) {
         hide(ctx)
         if (Deck.session.token.value == null || !allowed(ctx)) return
+        dev.kondraki.archon.data.InputLink.close()               // a fresh /ws/input per wake (#145)
         val app = ctx.applicationContext
         val wm = app.getSystemService(WindowManager::class.java)
         val d = app.resources.displayMetrics.density
