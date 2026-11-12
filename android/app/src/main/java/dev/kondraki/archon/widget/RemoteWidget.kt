@@ -218,18 +218,30 @@ class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) = RemoteState.refresh(context)
 }
 
+/* Taps reach a widget's receiver one at a time, each waiting for the previous to finish: so
+ * every action returns at once and does its work in the app's scope (see RcAction). */
+
 class MediaAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val act = parameters[ActKey] ?: return
+        val app = context.applicationContext
+        RemoteState.scope.launch { press(app, act) }
+    }
+
+    private suspend fun press(context: Context, act: String) {
         if (act == "play-pause") RemoteState.assume(context) { it.copy(playing = !it.playing) }
         if (withTimeoutOrNull(4000) { Deck.post("/media/$act") } != true) toast(context, "Rig offline, not sent")
-        delay(2500)                                          // the deck re-reads audio every 2 s
-        RemoteState.refresh(context)
+        RemoteState.confirmSoon(context)                     // the deck re-reads audio every 2 s
     }
 }
 
 class ScreensAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val app = context.applicationContext
+        RemoteState.scope.launch { press(app) }
+    }
+
+    private suspend fun press(context: Context) {
         val goHeadless = RemoteState.state.value.screensOn
         RemoteState.assume(context) { it.copy(screensOn = !goHeadless) }
         val r = withTimeoutOrNull(7000) { Deck.postJson("/headless", buildJsonObject { put("on", goHeadless) }) }
@@ -242,6 +254,11 @@ class ModeAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val id = parameters[ModeKey] ?: return
         val label = parameters[LabelKey] ?: id
+        val app = context.applicationContext
+        RemoteState.scope.launch { press(app, id, label) }
+    }
+
+    private suspend fun press(context: Context, id: String, label: String) {
         val r = withTimeoutOrNull(8000) { Deck.postJson("/modes/run", buildJsonObject { put("id", id) }) }
         toast(context, when {
             r == null -> "Rig offline, not run"

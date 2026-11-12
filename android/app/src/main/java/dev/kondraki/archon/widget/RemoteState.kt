@@ -111,6 +111,15 @@ object RemoteState {
         }
     }
 
+    /** One delayed re-read after a burst of presses: the deck polls audio every 2 s, so reading
+     *  at once returns the pre-press value. Each new press restarts the wait, so five quick VOL+
+     *  taps cost one refresh at the end, not five. */
+    private var confirmJob: kotlinx.coroutines.Job? = null
+    fun confirmSoon(ctx: Context, ms: Long = 2500) {
+        confirmJob?.cancel()
+        confirmJob = scope.launch { kotlinx.coroutines.delay(ms); refresh(ctx) }
+    }
+
     /** Run one press with the IR LED lit for its duration (the widget's only click feedback). */
     suspend fun <T> sending(ctx: Context, block: suspend () -> T): T {
         load(ctx)

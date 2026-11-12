@@ -312,9 +312,17 @@ private fun toast(ctx: Context, msg: String) = Handler(Looper.getMainLooper()).p
 /** Every key of the remote. Runs in a broadcast receiver (~10 s budget): each call is capped,
  *  and the IR LED is lit for the duration. */
 class RcAction : ActionCallback {
+    /** Android hands a widget's taps to its receiver ONE AT A TIME, each waiting for the last to
+     *  finish, so a callback that waits makes every following tap wait too (rapid VOL+ felt
+     *  ~2.5 s per press). So: hand the work to the app's scope and return at once. */
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val op = parameters[OpKey] ?: return
         val arg = parameters[ArgKey].orEmpty()
+        val app = context.applicationContext
+        RemoteState.scope.launch { press(app, op, arg) }
+    }
+
+    private suspend fun press(context: Context, op: String, arg: String) {
         if (Deck.session.token.value == null) { toast(context, "Open Archon and sign in first"); return }
         val snap = RemoteState.state.value
         fun body(b: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = buildJsonObject(b)
@@ -353,9 +361,8 @@ class RcAction : ActionCallback {
             op == "mode" -> toast(context, "${arg.substringAfter('|')} mode started")
             op == "lock" -> toast(context, "Rig locked")
         }
-        // keep the optimistic face until the deck has re-read: it polls audio every 2 s, so an
-        // immediate GET /state returns the pre-press value and flips MUTE / VOL straight back
-        if (op in setOf("media", "mute", "mic", "vol", "source", "ch")) delay(2500)
-        RemoteState.refresh(context)
+        // keep the optimistic face until the deck has re-read (it polls audio every 2 s)
+        if (op in setOf("media", "mute", "mic", "vol", "source", "ch")) RemoteState.confirmSoon(context)
+        else RemoteState.refresh(context)
     }
 }
