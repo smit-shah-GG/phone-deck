@@ -191,21 +191,50 @@ async def headless_set(payload: dict, _=Depends(auth.require_auth)):
     return JSONResponse(await headless.set_on(bool(payload.get("on"))))
 
 
+# The bounce page for /app.apk opened from a link in another app: the session cookie is
+# SameSite=Strict, so a cross-site navigation arrives without it ("PIN required" although the
+# deck is signed in). A navigation this page starts is same-site, so the cookie rides along.
+_APK_BOUNCE = ('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+               '<title>Archon</title><body style="background:#000;color:#fa4242;font-family:monospace;'
+               'display:flex;align-items:center;justify-content:center;height:100vh;margin:0">'
+               '<div>downloading Archon…</div><script>location.replace("/app.apk?b=1")</script>')
+
+
+def _apk_meta() -> dict:
+    try:
+        meta = json.loads((config.APK_DIR / "archon.apk.json").read_text())
+        return meta if isinstance(meta, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 @app.get("/app.apk")
-async def android_apk(_=Depends(auth.require_auth)):
-    # The latest signed Archon build, for tap-to-install from a phone's browser (which
-    # already holds the deck cookie). android/release.sh publishes it.
+async def android_apk(request: Request, b: int = 0):
+    # The latest signed Archon build, for tap-to-install from a phone's browser.
+    # android/release.sh publishes it. No cookie: bounce once (same-site → the cookie comes
+    # along); still none: really signed out → the PIN page, then straight back here.
+    if not auth._valid(request.cookies.get(auth.COOKIE_NAME)):
+        if not b:
+            return HTMLResponse(_APK_BOUNCE, headers={"Cache-Control": "no-store"})
+        return RedirectResponse("/login?next=/app.apk", status_code=303)
     apk = config.APK_DIR / "archon.apk"
     if not apk.is_file():
         return JSONResponse({"error": "no Android build published yet (run android/release.sh)"},
                             status_code=404)
-    try:
-        ver = json.loads((config.APK_DIR / "archon.apk.json").read_text()).get("version") or "latest"
-    except (OSError, ValueError, AttributeError):
-        ver = "latest"
+    ver = _apk_meta().get("version") or "latest"
     ver = "".join(c for c in str(ver) if c.isalnum() or c in "._-") or "latest"
     return FileResponse(apk, media_type="application/vnd.android.package-archive",
                         filename=f"archon-{ver}.apk", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/app.apk.json")
+async def android_apk_meta(_=Depends(auth.require_auth)):
+    # Archon's in-app updater asks this: the published build's version + versionCode.
+    if not (config.APK_DIR / "archon.apk").is_file():
+        return JSONResponse({"error": "no Android build published yet"}, status_code=404)
+    m = _apk_meta()
+    code = m.get("code")
+    return JSONResponse({"version": str(m.get("version") or ""), "code": code if isinstance(code, int) else 0})
 
 
 @app.get("/history")
@@ -226,16 +255,20 @@ async def login_form(request: Request):
     return templates.TemplateResponse(request, "login.html")
 
 
+_LOGIN_NEXT = {"/app.apk"}       # where a successful PIN may send you; anything else → "/"
+
+
 @app.post("/login")
-async def login(pin: str = Form(...)):
+async def login(pin: str = Form(...), next: str = Form("")):
     locked = auth.login_locked()
     if locked > 0:
         return RedirectResponse(f"/login?locked={int(locked) + 1}", status_code=303)
+    nxt = next if next in _LOGIN_NEXT else ""
     if not config.check_pin(pin):
         auth.record_failure()
-        return RedirectResponse("/login?bad=1", status_code=303)
+        return RedirectResponse("/login?bad=1" + (f"&next={nxt}" if nxt else ""), status_code=303)
     auth.record_success()
-    return _with_session(RedirectResponse("/", status_code=303), auth.issue_token())
+    return _with_session(RedirectResponse(nxt or "/", status_code=303), auth.issue_token())
 
 
 def _with_session(resp, token: str):

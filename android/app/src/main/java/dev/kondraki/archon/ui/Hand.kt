@@ -135,14 +135,16 @@ fun SlimRail(panel: String?, more: Boolean, onPanel: (String) -> Unit, modifier:
         verticalArrangement = Arrangement.spacedBy(7.dp)) {
         RAIL.forEach { (key, glyph) -> RailIcon(key, glyph, panel == key) { onPanel(key) } }
         Spacer(Modifier.weight(1f))
-        RailIcon("more", "⋯", more) { onPanel("more") }
+        val upd by dev.kondraki.archon.data.Updater.state.collectAsState()
+        RailIcon("more", "⋯", more, badge = upd is dev.kondraki.archon.data.UpdateState.Available ||
+            upd is dev.kondraki.archon.data.UpdateState.Failed) { onPanel("more") }
     }
 }
 
 private val RAIL = listOf("audio" to "♪", "stream" to "▶", "voice" to "◉", "modes" to "◇", "site19" to "emblem", "remote" to "✥")
 
 @Composable
-private fun RailIcon(key: String, glyph: String, on: Boolean, onClick: () -> Unit) {
+private fun RailIcon(key: String, glyph: String, on: Boolean, badge: Boolean = false, onClick: () -> Unit) {
     val ph = LocalPh.current
     val shape = RoundedCornerShape(8.dp)
     Box(Modifier.fillMaxWidth().height(44.dp).clip(shape).background(if (on) ph.active else ph.high)
@@ -151,5 +153,8 @@ private fun RailIcon(key: String, glyph: String, on: Boolean, onClick: () -> Uni
         if (glyph == "emblem") Image(painterResource(R.drawable.emblem), "Site-19", Modifier.size(20.dp),
             colorFilter = ColorFilter.tint(if (on) ph.primary else ph.on))
         else Mono(glyph, 18.sp, if (on) ph.primary else ph.on)
+        // an update is waiting (#157): a small amber dot in the corner
+        if (badge) Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(8.dp).clip(androidx.compose.foundation.shape.CircleShape)
+            .background(ph.secondary).glow(ph.secondary, 4.dp))
     }
 }

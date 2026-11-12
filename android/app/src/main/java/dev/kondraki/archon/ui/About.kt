@@ -1,5 +1,9 @@
 package dev.kondraki.archon.ui
 
+import androidx.compose.ui.graphics.lerp
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -23,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -69,6 +74,7 @@ fun AboutPanel(onOpen: (String) -> Unit) {
             }
         }, thumb = {
             Column(Modifier.width(THUMB_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                UpdateCard()
                 listOf("files" to "Files", "config" to "Config", "system" to "System").forEach { (key, name) ->
                     LaunchButton(name, Modifier.fillMaxWidth().height(64.dp)) { onOpen(key) }
                 }
@@ -118,4 +124,37 @@ private fun LaunchButton(name: String, modifier: Modifier, onClick: () -> Unit) 
     val shape = RoundedCornerShape(8.dp)
     Box(modifier.clip(shape).background(ph.high).border(1.dp, ph.line, shape).tap(onClick),
         contentAlignment = Alignment.Center) { Label(name, 15.sp, ph.on, spacing = 0.2f) }
+}
+
+/** The in-app updater's face (#157): only shown when there's something to say. */
+@Composable
+private fun UpdateCard() {
+    val ph = LocalPh.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val u by dev.kondraki.archon.data.Updater.state.collectAsState()
+    val shape = RoundedCornerShape(8.dp)
+    val go = { scope.launch { dev.kondraki.archon.data.Updater.install(ctx) }; Unit }
+    when (val s = u) {
+        is dev.kondraki.archon.data.UpdateState.Available -> Column(Modifier.fillMaxWidth().clip(shape).background(lerp(Color.Black, ph.secondary, 0.14f))
+            .border(1.dp, ph.secondary, shape).boxGlow(ph.secondary, 6.dp, 0.25f).tap(go).padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Label("⬆ UPDATE TO ${s.version}", 14.sp, ph.secondary, spacing = 0.14f, glow = true)
+            Mono(s.note.ifEmpty { "installed: ${BuildConfig.VERSION_NAME} · tap to install" }, 11.sp, ph.onVar, maxLines = 2)
+        }
+        is dev.kondraki.archon.data.UpdateState.Downloading -> Column(Modifier.fillMaxWidth().clip(shape).border(1.dp, ph.outline, shape).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Mono("downloading ${s.version} · ${s.pct}%", 12.sp, ph.on)
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(ph.high)) {
+                Box(Modifier.fillMaxWidth(s.pct / 100f).height(4.dp).background(ph.secondary))
+            }
+        }
+        is dev.kondraki.archon.data.UpdateState.Installing -> Box(Modifier.fillMaxWidth().clip(shape).border(1.dp, ph.outline, shape).padding(12.dp)) {
+            Mono("installing ${s.version}… Archon restarts on the new build", 12.sp, ph.on, maxLines = 2)
+        }
+        is dev.kondraki.archon.data.UpdateState.Failed -> Column(Modifier.fillMaxWidth().clip(shape).border(1.dp, DANGER, shape).tap(go).padding(12.dp)) {
+            Mono("✗ update ${s.version}: ${s.why}", 12.sp, DANGER, maxLines = 2)
+            Mono("tap to try again", 11.sp, ph.onVar)
+        }
+        dev.kondraki.archon.data.UpdateState.None -> {}
+    }
 }

@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Cog.touched()                                             // coming back counts as activity
+        lifecycleScope.launch { runCatching { dev.kondraki.archon.data.Updater.check() } }   // a newer build on the rig? (#157)
         // redraw the Remote widget: its stick picks overlay vs activity by the overlay permission
         lifecycleScope.launch { runCatching { dev.kondraki.archon.widget.RemoteControlWidget().updateAll(this@MainActivity) } }
         // the cogitator's idle timer (app.js: every 5 s), held off while voice records, the rig's

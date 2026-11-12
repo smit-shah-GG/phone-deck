@@ -29,6 +29,7 @@
     <h1 class="text-lg tracking-widest text-zinc-400 uppercase">archon</h1>
     <div id="dots" class="h-9 flex items-center justify-center text-3xl tracking-[0.4em] text-zinc-300"></div>
     <input type="hidden" name="pin" id="pin">
+    <input type="hidden" name="next" value="{{ request.query_params.get('next', '') if request.query_params.get('next', '') == '/app.apk' else '' }}">
     <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-xl py-3 font-medium">Unlock</button>
     {% if request.query_params.get('locked') %}
       <p class="text-red-400 text-sm">Locked — try again in {{ request.query_params.get('locked') }}s</p>

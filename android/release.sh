@@ -15,7 +15,10 @@ apk=app/build/outputs/apk/release/app-release.apk
 "$ANDROID_HOME"/build-tools/*/apksigner verify "$apk" >/dev/null || { echo "release APK is not signed" >&2; exit 1; }
 out="$HOME/.local/share/phone-deck/android"; mkdir -p "$out"
 cp "$apk" "$out/archon.apk.tmp" && mv "$out/archon.apk.tmp" "$out/archon.apk"
-ver=$("$ANDROID_HOME"/build-tools/*/aapt2 dump badging "$apk" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)
-printf '{"version": "%s", "built": "%s"}\n' "$ver" "$(date -Iseconds)" > "$out/archon.apk.json"
+badging=$("$ANDROID_HOME"/build-tools/*/aapt2 dump badging "$apk" 2>/dev/null)
+ver=$(printf '%s' "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)
+code=$(printf '%s' "$badging" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
+# version + versionCode: Archon's in-app updater compares the code with its own (#157)
+printf '{"version": "%s", "code": %s, "built": "%s"}\n' "$ver" "${code:-0}" "$(date -Iseconds)" > "$out/archon.apk.json"
 url=$(sed -n 's/^deckUrl=//p' "$cfg/archon.properties" 2>/dev/null)
 echo "published $ver ($(du -h "$apk" | cut -f1)) → ${url:-<deck>}/app.apk"

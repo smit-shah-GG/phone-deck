@@ -70,12 +70,46 @@ def test_state_needs_auth_and_returns_the_ws_snapshot(monkeypatch):
     assert s["audio"]["mic_muted"] is True
 
 
-def test_apk_needs_auth_and_404s_until_published(tmp_path, monkeypatch):
+def test_apk_without_the_cookie_bounces_then_asks_for_the_pin(tmp_path, monkeypatch):
+    # opened from a link in another app, the Strict cookie stays behind: bounce once same-site
     monkeypatch.setattr(config, "APK_DIR", tmp_path)
     _anon()
-    assert client.get("/app.apk").status_code == 401
+    r = client.get("/app.apk", follow_redirects=False)
+    assert r.status_code == 200 and 'location.replace("/app.apk?b=1")' in r.text
+    r = client.get("/app.apk?b=1", follow_redirects=False)            # still no cookie: signed out
+    assert r.status_code == 303 and r.headers["location"] == "/login?next=/app.apk"
     _authed()
-    assert client.get("/app.apk").status_code == 404
+    assert client.get("/app.apk").status_code == 404                  # signed in, nothing published
+
+
+def test_login_returns_only_to_the_apk(monkeypatch):
+    monkeypatch.setattr(config, "check_pin", lambda p: p == "1234")
+    monkeypatch.setattr(auth, "login_locked", lambda: 0)
+    _anon()
+    r = client.post("/login", data={"pin": "1234", "next": "/app.apk"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/app.apk"
+    _anon()
+    r = client.post("/login", data={"pin": "1234", "next": "https://evil.example/x"}, follow_redirects=False)
+    assert r.headers["location"] == "/"                               # no open redirect
+    _anon()
+    r = client.post("/login", data={"pin": "1234"}, follow_redirects=False)
+    assert r.headers["location"] == "/"                               # the native app's login is unchanged
+    _anon()
+    r = client.post("/login", data={"pin": "0000", "next": "/app.apk"}, follow_redirects=False)
+    assert r.headers["location"] == "/login?bad=1&next=/app.apk"
+
+
+def test_apk_meta_reports_the_published_build(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "APK_DIR", tmp_path)
+    _anon()
+    assert client.get("/app.apk.json").status_code == 401
+    _authed()
+    assert client.get("/app.apk.json").status_code == 404
+    (tmp_path / "archon.apk").write_bytes(b"PK")
+    (tmp_path / "archon.apk.json").write_text('{"version": "0.1.84", "code": 84}')
+    assert client.get("/app.apk.json").json() == {"version": "0.1.84", "code": 84}
+    (tmp_path / "archon.apk.json").write_text('{"version": "0.1.7"}')      # an old release.sh: no code
+    assert client.get("/app.apk.json").json() == {"version": "0.1.7", "code": 0}
 
 
 @pytest.mark.parametrize("meta,name", [
