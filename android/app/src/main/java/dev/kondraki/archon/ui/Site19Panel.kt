@@ -71,7 +71,7 @@ fun Site19Panel() {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     status = "Reading clearance — crossing…"
                     scope.launch {
-                        val r = Deck.postJson("/site19/toggle", buildJsonObject { put("uid", uid) })
+                        val r = Deck.postJson("/site19/toggle", buildJsonObject { put("uid", uid) }, Deck.slow)   // the crossing takes >10 s
                         output = r?.str("output") ?: r?.toString().orEmpty()
                         status = site19Line(r?.bool("ok"), r?.bool("denied") == true, uid, r == null)
                     }

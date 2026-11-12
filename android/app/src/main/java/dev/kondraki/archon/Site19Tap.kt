@@ -31,7 +31,7 @@ class Site19Tap : Activity() {
         if (uid.isNotEmpty() && Deck.session.token.value != null) {
             Toast.makeText(app, "◈ Reading clearance — crossing…", Toast.LENGTH_SHORT).show()
             CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
-                val r = Deck.postJson("/site19/toggle", buildJsonObject { put("uid", uid) })
+                val r = Deck.postJson("/site19/toggle", buildJsonObject { put("uid", uid) }, Deck.slow)   // the crossing takes >10 s
                 Toast.makeText(app, site19Line(r?.bool("ok"), r?.bool("denied") == true, uid, r == null), Toast.LENGTH_LONG).show()
             }
         } else if (Deck.session.token.value == null) {
