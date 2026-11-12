@@ -1,5 +1,6 @@
 package dev.kondraki.archon.ui
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -65,6 +66,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 private const val WS_COUNT = 15            // app.js WS_COUNT: workspaces shown per monitor
+private val WIN_LIST_H = 154.dp            // five window rows (~30 dp pitch, measured on the M52)
 
 /** HOME: one card per monitor in PHYSICAL order (capped at 3), each with its workspace grid at
  *  the bottom, then a strip with the context row and the docked mini player (#156). */
@@ -103,8 +105,8 @@ fun Home(state: JsonObject?) {
             }
         }
         // the bottom strip (#156): the context row shares it with the docked mini player
-        HandRow(Modifier.fillMaxWidth(), gap = 8.dp,
-            look = { Box(Modifier.weight(1f), contentAlignment = if (Hand.right.value) Alignment.CenterEnd else Alignment.CenterStart) {
+        HandRow(Modifier.fillMaxWidth(), gap = 12.dp, align = Alignment.CenterVertically,
+            look = { Box(Modifier.weight(1f)) {
                 ContextStrip(state, ctx) { path, body -> post(path, body) } } },
             thumb = { MiniPlayer() })
     }
@@ -133,7 +135,8 @@ private fun MonitorCard(
             Label("BRT", 12.sp, ph.primary, spacing = 0f, glow = true)
             BrightSlider(bright, Modifier.weight(1f), onBright)
         }
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // five window entries always fit (more scroll); the workspace grid takes what's left (#156)
+        Column(Modifier.height(WIN_LIST_H).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             wins.forEach { w ->
                 val ws = w.num("ws")?.toInt()
                 val title = w.str("title")?.takeIf { it.isNotEmpty() } ?: w.str("cls") ?: "?"
@@ -143,10 +146,10 @@ private fun MonitorCard(
             }
         }
         // the workspace grid at the BOTTOM of the card: tapped constantly, so nearest the thumbs (#156)
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             (1..WS_COUNT).chunked(5).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { n -> WsButton(n, n == active, Modifier.weight(1f)) { onWs(n) } }
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { n -> WsButton(n, n == active, Modifier.weight(1f).fillMaxHeight()) { onWs(n) } }
                 }
             }
         }
@@ -201,7 +204,7 @@ private fun Phosphor.filled() = lerp(Color.Black, primary, 0.88f)
 private fun WsButton(n: Int, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val ph = LocalPh.current
     val shape = RoundedCornerShape(4.dp)
-    Box(modifier.aspectRatio(1f).breathe(active).clip(shape)
+    Box(modifier.breathe(active).clip(shape)
         .background(if (active) ph.filled() else ph.high)
         .border(1.dp, ph.outline, shape).tap(onClick), contentAlignment = Alignment.Center) {
         Mono(n.toString(), 14.sp, if (active) ph.onPrimary else ph.on)
@@ -254,16 +257,16 @@ private fun ContextStrip(state: JsonObject?, ctx: JsonObject?, post: (String, Js
     val focusedCls = wins.firstOrNull { it.bool("focused") == true }?.str("cls") ?: hypr.obj("active_window").str("class").orEmpty()
     fun loose(x: String, y: String) = x == y || x.contains(y) || y.contains(x)
 
-    val rows = mutableListOf<@Composable () -> Unit>()
+    val rows = mutableListOf<@Composable RowScope.() -> Unit>()
     val calls = (ctx?.get("call_apps") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
     val recording = (a?.get("recording") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
     val rec = recording.filter { r -> calls.any { loose(r, it) } }
     if (rec.isNotEmpty()) rows += {
         val muted = a.bool("mic_muted") == true
         val callWin = wins.firstOrNull { w -> w.str("cls")?.let { c -> rec.any { loose(c, it) } } == true }
-        CtxRow("Call") {
-            CtxBtn(if (muted) "UNMUTE" else "MUTE", danger = muted) { post("/audio/mute", buildJsonObject { put("target", "mic") }) }
-            callWin?.str("address")?.let { addr -> CtxBtn("↪ call") { post("/hypr/focus", buildJsonObject { put("address", addr) }) } }
+        CtxRow("Call", Modifier.weight(0.5f)) {
+            CtxBtn(if (muted) "UNMUTE" else "MUTE", danger = muted, Modifier.weight(1f)) { post("/audio/mute", buildJsonObject { put("target", "mic") }) }
+            callWin?.str("address")?.let { addr -> CtxBtn("↪ call", modifier = Modifier.weight(1f)) { post("/hypr/focus", buildJsonObject { put("address", addr) }) } }
         }
     }
     (ctx?.get("apps") as? JsonObject)?.forEach { (cls, appEl) ->
@@ -271,9 +274,9 @@ private fun ContextStrip(state: JsonObject?, ctx: JsonObject?, post: (String, Js
         val present = if (app.str("show") == "persist") wins.any { it.str("cls") == cls } else focusedCls == cls
         if (!present) return@forEach
         rows += {
-            CtxRow(app.str("label") ?: cls) {
+            CtxRow(app.str("label") ?: cls, Modifier.weight(1f)) {
                 app.list("controls").forEach { c ->
-                    CtxBtn(c.str("label") ?: c.str("key").orEmpty()) {
+                    CtxBtn(c.str("label") ?: c.str("key").orEmpty(), modifier = Modifier.weight(1f)) {
                         post("/context/key", buildJsonObject { put("cls", cls); put("key", c.str("key").orEmpty()); put("mods", c.str("mods").orEmpty()) })
                     }
                 }
@@ -281,29 +284,27 @@ private fun ContextStrip(state: JsonObject?, ctx: JsonObject?, post: (String, Js
         }
     }
     if (rows.isEmpty()) return
-    Row(
-        Modifier.fillMaxWidth().drawBehind { drawLine(ph.line, Offset(0f, 0f), Offset(size.width, 0f), 1f) }
-            .padding(start = 4.dp, end = 4.dp, top = 7.dp, bottom = 1.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically,
-    ) { rows.forEach { it() } }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        rows.forEach { it() }
+    }
 }
 
 @Composable
-private fun CtxRow(label: String, content: @Composable () -> Unit) {
+private fun CtxRow(label: String, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     val ph = LocalPh.current
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Label(label, 9.sp, ph.secondary)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Label(label.uppercase(), 10.sp, ph.secondary, spacing = 0.14f)
         content()
     }
 }
 
 @Composable
-private fun CtxBtn(text: String, danger: Boolean = false, onClick: () -> Unit) {
+private fun CtxBtn(text: String, danger: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val ph = LocalPh.current
-    val shape = RoundedCornerShape(6.dp)
-    Box(Modifier.clip(shape).background(ph.low).border(1.dp, if (danger) DANGER else ph.outline, shape)
-        .tap(onClick).padding(horizontal = 9.dp, vertical = 3.dp)) {
-        Mono(text, 11.sp, if (danger) DANGER else ph.on)
+    val shape = RoundedCornerShape(7.dp)
+    Box(modifier.height(40.dp).clip(shape).background(ph.high).border(1.dp, if (danger) DANGER else ph.outline, shape)
+        .tap(onClick), contentAlignment = Alignment.Center) {
+        Mono(text, 13.sp, if (danger) DANGER else ph.on)
     }
 }
 

@@ -69,9 +69,9 @@ val MINI_H: Dp = 58.dp
 
 /** [look] and [thumb] side by side, the thumb on the dominant side. */
 @Composable
-fun HandRow(modifier: Modifier = Modifier, gap: Dp = 12.dp,
+fun HandRow(modifier: Modifier = Modifier, gap: Dp = 12.dp, align: Alignment.Vertical = Alignment.Top,
             look: @Composable RowScope.() -> Unit, thumb: @Composable RowScope.() -> Unit) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = align) {
         if (Hand.right.value) { look(); thumb() } else { thumb(); look() }
     }
 }
