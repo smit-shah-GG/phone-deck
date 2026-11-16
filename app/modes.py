@@ -90,26 +90,21 @@ async def _run_dispatch(args: list[str]) -> tuple[int, bytes]:
 
 
 def _ok(rc: int, out: bytes) -> bool:
-    return rc == 0 and b"error" not in out.lower()
+    # success = hyprctl's literal "ok" (see hypr._ok: 0.57 answers some refusals with rc 0)
+    return rc == 0 and out.strip().lower() == b"ok"
 
 
 async def _dispatch(classic: list[str], lua: str) -> bool:
-    """Issue one dispatch using whichever protocol the compositor speaks.
-
-    `classic` is the old ["dispatcher", "args"] form; `lua` is the 0.56+
-    `hl.dsp.*` expression. On a Lua compositor the classic attempt fails on a
-    parse error *before* it acts (so no double-exec), then we retry with Lua
-    and remember the choice for the rest of the run.
-    """
+    """Issue one dispatch in whichever protocol the compositor speaks: the remembered one
+    first, the other if that fails (a parse error rejects before acting, so no double-exec),
+    and remember whichever worked, so a Hyprland upgrade can't strand it (as hypr._either)."""
     global _USE_LUA
-    if _USE_LUA is None:
-        if _ok(*await _run_dispatch(classic)):
-            _USE_LUA = False
+    order = [([lua], True), (classic, False)] if _USE_LUA in (None, True) else [(classic, False), ([lua], True)]
+    for args, is_lua in order:
+        if _ok(*await _run_dispatch(args)):
+            _USE_LUA = is_lua
             return True
-        _USE_LUA = True  # classic rejected -> this is a Lua-dispatch compositor
-    if _USE_LUA:
-        return _ok(*await _run_dispatch([lua]))
-    return _ok(*await _run_dispatch(classic))
+    return False
 
 
 async def _exec(rule_cmd: str) -> bool:

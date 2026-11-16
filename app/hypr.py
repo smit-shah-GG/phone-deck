@@ -106,43 +106,39 @@ async def _run(*argv: str) -> tuple[int, bytes]:
 
 
 def _ok(rc: int, out: bytes) -> bool:
-    # Success is rc 0 with none of the known failure tells. `keyword` on a Lua
-    # compositor returns rc 0 but says "non-legacy parsers / Use eval", so an
-    # rc check alone would misread it as success — hence the phrase guards.
-    o = out.lower()
-    return rc == 0 and b"error" not in o and b"legacy" not in o and b"use eval" not in o
+    # Success is hyprctl's literal "ok". Failures come in too many shapes to blacklist:
+    # 0.56 said "non-legacy parsers / Use eval" for `keyword`, but 0.57 says just
+    # "unknown request" with rc 0, which the old phrase guards read as success, cached
+    # the classic syntax, and broke every workspace/window switch (2026-11-16).
+    return rc == 0 and out.strip().lower() == b"ok"
+
+
+async def _either(classic: list[str], lua: list[str]) -> bool:
+    """Run one hyprctl command in whichever syntax the compositor speaks: the cached one
+    first, the other if that fails, and cache whichever worked. So the deck re-detects on
+    its own after a Hyprland upgrade instead of staying stuck on a dead syntax."""
+    global _USE_LUA
+    order = [(lua, True), (classic, False)] if _USE_LUA in (None, True) else [(classic, False), (lua, True)]
+    for argv, is_lua in order:
+        if _ok(*await _run(*argv)):
+            _USE_LUA = is_lua
+            return True
+    return False
 
 
 async def _dispatch(classic: list[str], lua: str) -> bool:
-    """Issue one dispatch via whichever protocol the compositor speaks. `classic` is
-    the old ["dispatcher", "args", …] form; `lua` is the 0.56+ hl.dsp.* expression.
-    First use tries classic, falls back to Lua on failure, and caches the choice."""
-    global _USE_LUA
-    if _USE_LUA is None:
-        if _ok(*await _run("dispatch", *classic)):
-            _USE_LUA = False
-            return True
-        _USE_LUA = True
-    if _USE_LUA:
-        return _ok(*await _run("dispatch", lua))
-    return _ok(*await _run("dispatch", *classic))
+    """One dispatch. `classic` is the old ["dispatcher", "args", …] form; `lua` is the
+    0.56+ hl.dsp.* expression (`hyprctl dispatch` wraps it in hl.dispatch(...))."""
+    return await _either(["dispatch", *classic], ["dispatch", lua])
 
 
 async def _set_workspace_rule(ws: int, monitor: str, default: bool) -> bool:
     """Bind a workspace to a monitor at runtime (the HYBRID monitor map). Classic:
     `keyword workspace "N, monitor:M[, default:true]"`; 0.56+: hl.workspace_rule(...)."""
-    global _USE_LUA
     val = f"{ws}, monitor:{monitor}" + (", default:true" if default else "")
     lua = (f"hl.workspace_rule({{workspace={ws}, monitor={_lua_str(monitor)}"
            + (", default=true" if default else "") + "})")
-    if _USE_LUA is None:
-        if _ok(*await _run("keyword", "workspace", val)):
-            _USE_LUA = False
-            return True
-        _USE_LUA = True
-    if _USE_LUA:
-        return _ok(*await _run("eval", lua))
-    return _ok(*await _run("keyword", "workspace", val))
+    return await _either(["keyword", "workspace", val], ["eval", lua])
 
 
 
