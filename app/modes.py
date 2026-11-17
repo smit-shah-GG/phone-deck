@@ -157,13 +157,13 @@ async def run(mode_id: str) -> dict:
             name = step["cmd"].split()[0].rsplit("/", 1)[-1]
             existing = [c for c in await _clients() if match and c.get("class") == match]
             if step.get("once") and existing:
-                # already open — just make sure it's on the right workspace and move on
-                c = existing[0]
-                if c.get("workspace", {}).get("id") != ws:
-                    await _move_to_ws(c["address"], ws)
-                    done.append(f"placed {name} -> ws{ws}")
-                else:
+                # already open: if one is already on the target workspace, leave every window
+                # where it is (several Opera GX windows are normal); else bring one over
+                if any(c.get("workspace", {}).get("id") == ws for c in existing):
                     done.append(f"skip {name} (open)")
+                else:
+                    await _move_to_ws(existing[0]["address"], ws)
+                    done.append(f"placed {name} -> ws{ws}")
                 continue
             before = {c["address"] for c in existing}
             await _exec(f"[workspace {ws} silent] {step['cmd']}")
